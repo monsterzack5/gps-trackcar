@@ -1,0 +1,23 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/../zephyr/include",
+                "${workspaceFolder}/../modules/lib/nanopb",
+                "${workspaceFolder}/build/monitor-firmware/zephyr/include/generated/zephyr",
+                "${workspaceFolder}/build/mcuboot/zephyr/include/generated/zephyr",
+                "${workspaceFolder}/build/zephyr/include/generated/zephyr"
+            ],
+            "defines": [],
+            "compilerPath": "${userHome}/zephyr-sdk-0.17.0/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
+            "compileCommands": [
+                "${workspaceFolder}/build/gps-tracker-test/compile_commands.json",
+                "${workspaceFolder}/build/monitor-firmware/compile_commands.json",
+                "${workspaceFolder}/build/mcuboot/compile_commands.json"
+            ]
+        }
+    ],
+    "version": 4
+}
