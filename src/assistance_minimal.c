@@ -15,11 +15,10 @@
 #include <zephyr/sys_clock.h>
 
 #include "assistance.h"
-#include "factory_almanac_v2.h"
 #include "factory_almanac_v3.h"
 #include "mcc_location_table.h"
 
-LOG_MODULE_DECLARE(gnss_sample, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(almanac_helper, LOG_LEVEL_DBG);
 
 /* (6.1.1980 UTC - 1.1.1970 UTC) */
 #define GPS_TO_UNIX_UTC_OFFSET_SECONDS (315964800UL)
@@ -27,11 +26,6 @@ LOG_MODULE_DECLARE(gnss_sample, LOG_LEVEL_DBG);
 #define GPS_TO_UTC_LEAP_SECONDS (18UL)
 #define DAYS_PER_WEEK (7UL)
 #define PLMN_STR_MAX_LEN 8 /* MCC + MNC + quotes */
-
-enum almanac_version {
-    FACTORY_ALMANAC_V2 = 2,
-    FACTORY_ALMANAC_V3 = 3
-};
 
 static char current_alm_checksum[64];
 
@@ -64,40 +58,25 @@ static struct settings_handler assistance_settings = {
     .h_set = set,
 };
 
-static enum almanac_version factory_almanac_version_get(void)
-{
-    char resp[32];
-
-    if (nrf_modem_at_cmd(resp, sizeof(resp), "AT+CGMM") == 0) {
-        /* nRF9160 uses factory almanac file format version 2, while nRF91x1 uses
-         * version 3.
-         */
-        if (strstr(resp, "nRF9160") != NULL) {
-            return FACTORY_ALMANAC_V2;
-        }
-    }
-
-    return FACTORY_ALMANAC_V3;
-}
-
 static void factory_almanac_write(void)
 {
     int err;
-    enum almanac_version alm_version;
     const char* alm_data;
     const char* alm_checksum;
 
-    /* Get the supported factory almanac version. */
-    alm_version = factory_almanac_version_get();
-    LOG_DBG("Supported factory almanac version: %d", alm_version);
+    alm_data = FACTORY_ALMANAC_DATA_V3;
+    alm_checksum = FACTORY_ALMANAC_CHECKSUM_V3;
 
-    if (alm_version == 3) {
-        alm_data = FACTORY_ALMANAC_DATA_V3;
-        alm_checksum = FACTORY_ALMANAC_CHECKSUM_V3;
-    } else {
-        alm_data = FACTORY_ALMANAC_DATA_V2;
-        alm_checksum = FACTORY_ALMANAC_CHECKSUM_V2;
+    {
+
+        char resp_buffer[256] = { '\0' };
+
+        int rc = nrf_modem_at_cmd(resp_buffer, sizeof(resp_buffer), "AT+CFUN?");
+
+        printk("CFUN Response: %s\n", resp_buffer);
     }
+
+    printk("Current Checksum: %s\n", current_alm_checksum);
 
     /* Check if the same almanac has already been written to prevent unnecessary writes
      * to flash memory.
@@ -110,12 +89,16 @@ static void factory_almanac_write(void)
     err = nrf_modem_at_printf("AT%%XFILEWRITE=1,\"%s\",\"%s\"",
         alm_data, alm_checksum);
     if (err != 0) {
-        LOG_ERR("Failed to write factory almanac");
+
+        int err_type = nrf_modem_at_err_type(err);
+        int real_error = nrf_modem_at_err(err);
+        LOG_ERR("Failed to write factory almanac, err = %d, real_error = %d, err_type = %d", err, real_error, err_type);
+        // What the above command gives:
+        // [00:00:20.898,254] <err> almanac_helper: Failed to write factory almanac, err = 65536, real_error = 0, err_type = 1
         return;
     }
 
     LOG_INF("Wrote factory almanac");
-
     err = settings_save_one("assistance/almanac_checksum",
         alm_checksum,
         sizeof(current_alm_checksum));

@@ -10,6 +10,8 @@ LOG_MODULE_REGISTER(startup);
 /* Initialization of AUX pin */
 #if defined(CONFIG_BOARD_CIRCUITDOJO_FEATHER_NRF9151)
 
+// NOTE:
+// SEE: https://docs.nordicsemi.com/bundle/ref_at_commands/page/REF/at_commands/sip_pin_configuration/xantcfg_set.html
 // GPS and LTE use the same antenna, and are on the same UFL connector.
 // This is a callback that is called on modem library init.
 // it runs the below AT command to configure the nrf5191, and set

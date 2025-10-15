@@ -55,7 +55,10 @@
         "devicetree.h": "c",
         "nrf_modem_gnss.h": "c",
         "supl_os_client.h": "c",
-        "assistance.h": "c"
+        "assistance.h": "c",
+        "mcc_location_table.h": "c",
+        "factory_almanac_v3.h": "c",
+        "sys_clock.h": "c"
     },
     "robot.language-server.python": "/home/zach/.pyenv/versions/3.13.3/bin/python3.13",
     "robot.variables": {
