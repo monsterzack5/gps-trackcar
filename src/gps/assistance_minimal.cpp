@@ -203,12 +203,12 @@ static void location_inject(void)
     location.orientation_major = mcc_info->orientation;
     location.confidence = mcc_info->confidence;
 
-#if defined(CONFIG_GNSS_SAMPLE_LOW_ACCURACY)
-    if (CONFIG_GNSS_SAMPLE_ASSISTANCE_REFERENCE_ALT != -32767) {
+#if defined(CONFIG_GNSS_LOW_ACCURACY)
+    if (CONFIG_GNSS_ASSISTANCE_REFERENCE_ALT != -32767) {
         /* Use reference altitude to enable 3-sat first fix. */
         LOG_INF("Using reference altitude %d meters",
-            CONFIG_GNSS_SAMPLE_ASSISTANCE_REFERENCE_ALT);
-        location.altitude = CONFIG_GNSS_SAMPLE_ASSISTANCE_REFERENCE_ALT;
+            CONFIG_GNSS_ASSISTANCE_REFERENCE_ALT);
+        location.altitude = CONFIG_GNSS_ASSISTANCE_REFERENCE_ALT;
         /* The altitude uncertainty has to be less than 100 meters (coded number K has to
          * be less than 48) for the altitude to be used for a 3-sat fix. GNSS increases
          * the uncertainty depending on the age of the altitude and whether the device is

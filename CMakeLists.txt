@@ -7,10 +7,15 @@ find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 project(gps-tracker-test)
 
 target_sources(app PRIVATE
-    src/main.c
-    src/assistance_minimal.c
-    src/mcc_location_table.c
+    src/main.cpp
     src/startup.c
+
+    src/gps/assistance_minimal.cpp
+    src/gps/mcc_location_table.cpp
+    src/gps/gps.cpp
+
+    src/lte/send_request.cpp
+    src/lte/lte_manager.cpp
 )
 
 
