@@ -60,7 +60,8 @@
         "factory_almanac_v3.h": "c",
         "sys_clock.h": "c",
         "lte_manager.h": "c",
-        "nrf_modem_lib.h": "c"
+        "nrf_modem_lib.h": "c",
+        "cerrno": "cpp"
     },
     "robot.language-server.python": "/home/zach/.pyenv/versions/3.13.3/bin/python3.13",
     "robot.variables": {

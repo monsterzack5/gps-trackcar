@@ -12,6 +12,7 @@ target_sources(app PRIVATE
 
     src/lte_manager.cpp
     src/gps.cpp
+    src/networking.cpp
 
     # src/gps/assistance_minimal.cpp
     # src/gps/mcc_location_table.cpp

@@ -5,8 +5,11 @@
 #include <zephyr/logging/log.h>
 
 #include "lte_manager.h"
+#include "networking.h"
 
 LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
+
+static int64_t last_uptime_sent = 0;
 
 static void gnss_event_handler(int event)
 {
@@ -50,6 +53,8 @@ static void gnss_event_handler(int event)
     switch (event) {
     case NRF_MODEM_GNSS_EVT_NMEA: {
 
+        // Ignore just NMEA Bytes for now, focus on PVT (PVT Packets contain post-processed NMEA bytes)
+        break;
         // We got NMEA Data!
         // TODO: put that bad boy into a message queue
         // For now, just print it.
@@ -68,6 +73,27 @@ static void gnss_event_handler(int event)
 
         break;
     }
+
+    case NRF_MODEM_GNSS_EVT_PVT: {
+
+        nrf_modem_gnss_pvt_data_frame pvt_frame;
+
+        int pvt_rc = nrf_modem_gnss_read(&pvt_frame, sizeof(pvt_frame), event);
+
+        // printk("Flag bits:")
+
+        if (pvt_rc == 0 && pvt_frame.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID) {
+
+            if (last_uptime_sent + (int64_t)60000 > k_uptime_get()) {
+                send_packet(pvt_frame);
+                last_uptime_sent = k_uptime_get();
+                LOG_INF("Sent Packet!");
+            }
+        }
+
+        break;
+    }
+
     case NRF_MODEM_GNSS_EVT_FIX: {
 
         nrf_modem_gnss_nmea_data_frame frame_holder;
