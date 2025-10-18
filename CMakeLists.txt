@@ -10,12 +10,15 @@ target_sources(app PRIVATE
     src/main.cpp
     src/startup.c
 
-    src/gps/assistance_minimal.cpp
-    src/gps/mcc_location_table.cpp
-    src/gps/gps.cpp
+    src/lte_manager.cpp
+    src/gps.cpp
 
-    src/lte/send_request.cpp
-    src/lte/lte_manager.cpp
+    # src/gps/assistance_minimal.cpp
+    # src/gps/mcc_location_table.cpp
+    # src/gps/gps.cpp
+
+    # src/lte/send_request.cpp
+    # src/lte/lte_manager.cpp
 )
 
 

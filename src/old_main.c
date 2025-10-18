@@ -3,7 +3,6 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
-#include "gps.h"
 
 #include <date_time.h>
 #include <math.h>
@@ -17,10 +16,17 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-// TODO: Not this .. stuff
-#include "../lte/lte_manager.h"
+LOG_MODULE_REGISTER(gnss_sample, LOG_LEVEL_DBG);
 
-LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
+// #define CONFIG_GNSS_SAMPLE_MODE_CONTINUOUS 1
+
+#define CONFIG_GNSS_SAMPLE_MODE_PERIODIC 1
+#define CONFIG_GNSS_SAMPLE_PERIODIC_INTERVAL 10
+#define CONFIG_GNSS_SAMPLE_PERIODIC_TIMEOUT 120
+
+#define CONFIG_GNSS_SAMPLE_ASSISTANCE_MINIMAL 1
+#define CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND 1
+#undef CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE
 
 #define PI 3.14159265358979323846
 #define EARTH_RADIUS_METERS (6371.0 * 1000.0)
@@ -37,6 +43,7 @@ K_THREAD_STACK_DEFINE(gnss_workq_stack_area, GNSS_WORKQ_THREAD_STACK_SIZE);
 static struct nrf_modem_gnss_agnss_data_frame last_agnss;
 static struct k_work agnss_data_get_work;
 static volatile bool requesting_assistance;
+// ---
 
 static const char update_indicator[] = { '\\', '|', '/', '-' };
 
@@ -50,6 +57,7 @@ static double ref_longitude;
 
 K_MSGQ_DEFINE(nmea_queue, sizeof(struct nrf_modem_gnss_nmea_data_frame*), 10, 4);
 static K_SEM_DEFINE(pvt_data_sem, 0, 1);
+static K_SEM_DEFINE(time_sem, 0, 1);
 
 static struct k_poll_event events[2] = {
     K_POLL_EVENT_STATIC_INITIALIZER(K_POLL_TYPE_SEM_AVAILABLE,
@@ -60,14 +68,14 @@ static struct k_poll_event events[2] = {
         &nmea_queue, 0),
 };
 
-BUILD_ASSERT(IS_ENABLED(CONFIG_LTE_NETWORK_MODE_LTE_M_GPS) || IS_ENABLED(CONFIG_LTE_NETWORK_MODE_NBIOT_GPS) || IS_ENABLED(CONFIG_LTE_NETWORK_MODE_LTE_M_NBIOT_GPS),
-    "CONFIG_LTE_NETWORK_MODE_LTE_M_GPS, "
-    "CONFIG_LTE_NETWORK_MODE_NBIOT_GPS or "
-    "CONFIG_LTE_NETWORK_MODE_LTE_M_NBIOT_GPS must be enabled");
+// BUILD_ASSERT(IS_ENABLED(CONFIG_LTE_NETWORK_MODE_LTE_M_GPS) || IS_ENABLED(CONFIG_LTE_NETWORK_MODE_NBIOT_GPS) || IS_ENABLED(CONFIG_LTE_NETWORK_MODE_LTE_M_NBIOT_GPS),
+//     "CONFIG_LTE_NETWORK_MODE_LTE_M_GPS, "
+//     "CONFIG_LTE_NETWORK_MODE_NBIOT_GPS or "
+//     "CONFIG_LTE_NETWORK_MODE_LTE_M_NBIOT_GPS must be enabled");
 
-// BUILD_ASSERT((sizeof(CONFIG_GNSS_REFERENCE_LATITUDE) == 1 && sizeof(CONFIG_GNSS_REFERENCE_LONGITUDE) == 1) || (sizeof(CONFIG_GNSS_REFERENCE_LATITUDE) > 1 && sizeof(CONFIG_GNSS_REFERENCE_LONGITUDE) > 1),
-//     "CONFIG_GNSS_REFERENCE_LATITUDE and "
-//     "CONFIG_GNSS_REFERENCE_LONGITUDE must be both either set or empty");
+// BUILD_ASSERT((sizeof(CONFIG_GNSS_SAMPLE_REFERENCE_LATITUDE) == 1 && sizeof(CONFIG_GNSS_SAMPLE_REFERENCE_LONGITUDE) == 1) || (sizeof(CONFIG_GNSS_SAMPLE_REFERENCE_LATITUDE) > 1 && sizeof(CONFIG_GNSS_SAMPLE_REFERENCE_LONGITUDE) > 1),
+//     "CONFIG_GNSS_SAMPLE_REFERENCE_LATITUDE and "
+//     "CONFIG_GNSS_SAMPLE_REFERENCE_LONGITUDE must be both either set or empty");
 
 /* Returns the distance between two coordinates in meters. The distance is calculated using the
  * haversine formula.
@@ -97,14 +105,17 @@ static void print_distance_from_reference(struct nrf_modem_gnss_pvt_data_frame* 
     double distance = distance_calculate(pvt_data->latitude, pvt_data->longitude,
         ref_latitude, ref_longitude);
 
-    if (IS_ENABLED(CONFIG_GNSS_MODE_TTFF_TEST)) {
+    if (IS_ENABLED(CONFIG_GNSS_SAMPLE_MODE_TTFF_TEST)) {
         LOG_INF("Distance from reference: %.01f", distance);
     } else {
         printf("\nDistance from reference: %.01f\n", distance);
     }
 }
 
-// TODO: Refactor this to not use malloc
+#ifdef CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE
+#    error "bad"
+#endif
+
 static void gnss_event_handler(int event)
 {
     int retval;
@@ -118,8 +129,20 @@ static void gnss_event_handler(int event)
         }
         break;
 
+#if defined(CONFIG_GNSS_SAMPLE_MODE_TTFF_TEST)
+    case NRF_MODEM_GNSS_EVT_FIX:
+        /* Time to fix is calculated here, but it's printed from a delayed work to avoid
+         * messing up the NMEA output.
+         */
+        time_to_fix = (k_uptime_get() - fix_timestamp) / 1000.0;
+        k_work_schedule_for_queue(&gnss_work_q, &ttff_test_got_fix_work, K_MSEC(100));
+        k_work_schedule_for_queue(&gnss_work_q, &ttff_test_prepare_work,
+            K_SECONDS(CONFIG_GNSS_SAMPLE_MODE_TTFF_TEST_INTERVAL));
+        break;
+#endif /* CONFIG_GNSS_SAMPLE_MODE_TTFF_TEST */
+
     case NRF_MODEM_GNSS_EVT_NMEA:
-        nmea_data = reinterpret_cast<nrf_modem_gnss_nmea_data_frame*>((sizeof(struct nrf_modem_gnss_nmea_data_frame)));
+        nmea_data = k_malloc(sizeof(struct nrf_modem_gnss_nmea_data_frame));
         if (nmea_data == NULL) {
             LOG_ERR("Failed to allocate memory for NMEA");
             break;
@@ -138,14 +161,14 @@ static void gnss_event_handler(int event)
         break;
 
     case NRF_MODEM_GNSS_EVT_AGNSS_REQ:
-#if !defined(CONFIG_GNSS_ASSISTANCE_NONE)
+#if !defined(CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE)
         retval = nrf_modem_gnss_read(&last_agnss,
             sizeof(last_agnss),
             NRF_MODEM_GNSS_DATA_AGNSS_REQ);
         if (retval == 0) {
             k_work_submit_to_queue(&gnss_work_q, &agnss_data_get_work);
         }
-#endif /* !CONFIG_GNSS_ASSISTANCE_NONE */
+#endif /* !CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE */
         break;
 
     default:
@@ -153,7 +176,57 @@ static void gnss_event_handler(int event)
     }
 }
 
-#if !defined(CONFIG_GNSS_ASSISTANCE_NONE)
+#if !defined(CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE)
+#    if defined(CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND)
+K_SEM_DEFINE(lte_ready, 0, 1);
+
+static void lte_lc_event_handler(const struct lte_lc_evt* const evt)
+{
+    switch (evt->type) {
+    case LTE_LC_EVT_NW_REG_STATUS:
+        if ((evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_HOME) || (evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_ROAMING)) {
+            LOG_INF("Connected to LTE network");
+            k_sem_give(&lte_ready);
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
+void lte_connect(void)
+{
+    int err;
+
+    LOG_INF("Connecting to LTE network");
+
+    err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_ACTIVATE_LTE);
+    if (err) {
+        LOG_ERR("Failed to activate LTE, error: %d", err);
+        return;
+    }
+
+    k_sem_take(&lte_ready, K_FOREVER);
+
+    /* Wait for a while, because with IPv4v6 PDN the IPv6 activation takes a bit more time. */
+    k_sleep(K_SECONDS(1));
+}
+
+void lte_disconnect(void)
+{
+    int err;
+
+    err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_DEACTIVATE_LTE);
+    if (err) {
+        LOG_ERR("Failed to deactivate LTE, error: %d", err);
+        return;
+    }
+
+    LOG_INF("LTE disconnected");
+}
+#    endif /* CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND */
+
 static const char* get_system_string(uint8_t system_id)
 {
     switch (system_id) {
@@ -183,7 +256,17 @@ static void agnss_data_get_work_fn(struct k_work* item)
     __ASSERT(last_agnss.system[0].system_id == NRF_MODEM_GNSS_SYSTEM_GPS,
         "GPS data need not found");
 
-#    if defined(CONFIG_GNSS_ASSISTANCE_MINIMAL)
+#    if defined(CONFIG_GNSS_SAMPLE_ASSISTANCE_SUPL)
+    /* SUPL doesn't usually provide NeQuick ionospheric corrections and satellite real time
+     * integrity information. If GNSS asks only for those, the request should be ignored.
+     */
+    if (last_agnss.system[0].sv_mask_ephe == 0 && last_agnss.system[0].sv_mask_alm == 0 && (last_agnss.data_flags & ~(NRF_MODEM_GNSS_AGNSS_NEQUICK_REQUEST | NRF_MODEM_GNSS_AGNSS_INTEGRITY_REQUEST)) == 0) {
+        LOG_INF("Ignoring assistance request for only NeQuick and/or integrity");
+        return;
+    }
+#    endif /* CONFIG_GNSS_SAMPLE_ASSISTANCE_SUPL */
+
+#    if defined(CONFIG_GNSS_SAMPLE_ASSISTANCE_MINIMAL)
     /* With minimal assistance, the request should be ignored if no GPS time or position
      * is requested.
      */
@@ -191,7 +274,7 @@ static void agnss_data_get_work_fn(struct k_work* item)
         LOG_INF("Ignoring assistance request because no GPS time or position is requested");
         return;
     }
-#    endif /* CONFIG_GNSS_ASSISTANCE_MINIMAL */
+#    endif /* CONFIG_GNSS_SAMPLE_ASSISTANCE_MINIMAL */
 
     if (last_agnss.data_flags == 0 && last_agnss.system[0].sv_mask_ephe == 0 && last_agnss.system[0].sv_mask_alm == 0) {
         LOG_INF("Ignoring assistance request because only QZSS data is requested");
@@ -208,21 +291,64 @@ static void agnss_data_get_work_fn(struct k_work* item)
             last_agnss.system[i].sv_mask_alm);
     }
 
-    // TODO: This is ugly
-    lte::set_mode(LteMode::Connected);
+#    if defined(CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND)
+    lte_connect();
+#    endif /* CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND */
 
     err = assistance_request(&last_agnss);
     if (err) {
         LOG_ERR("Failed to request assistance data");
     }
-    // TODO: This is ugly
-    lte::set_mode(LteMode::Disconnected);
+
+#    if defined(CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND)
+    lte_disconnect();
+#    endif /* CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND */
 
     requesting_assistance = false;
 }
-#endif /* !CONFIG_GNSS_ASSISTANCE_NONE */
+#endif /* !CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE */
 
-static int workqueue_init(void)
+static void date_time_evt_handler(const struct date_time_evt* evt)
+{
+    k_sem_give(&time_sem);
+}
+
+static int modem_init(void)
+{
+    if (IS_ENABLED(CONFIG_DATE_TIME)) {
+        date_time_register_handler(date_time_evt_handler);
+    }
+
+#if defined(CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND)
+    lte_lc_register_handler(lte_lc_event_handler);
+#elif !defined(CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE)
+    lte_lc_psm_req(true);
+
+    LOG_INF("Connecting to LTE network");
+
+    if (lte_lc_connect() != 0) {
+        LOG_ERR("Failed to connect to LTE network");
+        return -1;
+    }
+
+    LOG_INF("Connected to LTE network");
+
+    if (IS_ENABLED(CONFIG_DATE_TIME)) {
+        LOG_INF("Waiting for current time");
+
+        /* Wait for an event from the Date Time library. */
+        k_sem_take(&time_sem, K_MINUTES(10));
+
+        if (!date_time_is_valid()) {
+            LOG_WRN("Failed to get current time, continuing anyway");
+        }
+    }
+#endif
+
+    return 0;
+}
+
+static int sample_init(void)
 {
     int err = 0;
 
@@ -240,8 +366,6 @@ static int workqueue_init(void)
 
     k_work_init(&agnss_data_get_work, agnss_data_get_work_fn);
 
-    // Setup assistance, currently just uses an almanac for minimal
-    // TODO: Support assistance none
     err = assistance_init(&gnss_work_q);
 
     return err;
@@ -250,13 +374,13 @@ static int workqueue_init(void)
 static int gnss_init_and_start(void)
 {
 
-#if defined(CONFIG_GNSS_ASSISTANCE_NONE)
+#if defined(CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE) || defined(CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND)
     /* Enable GNSS. */
     if (lte_lc_func_mode_set(LTE_LC_FUNC_MODE_ACTIVATE_GNSS) != 0) {
         LOG_ERR("Failed to activate GNSS functional mode");
         return -1;
     }
-#endif /* CONFIG_GNSS_ASSISTANCE_NONE  */
+#endif /* CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE || CONFIG_GNSS_SAMPLE_LTE_ON_DEMAND */
 
     /* Configure GNSS. */
     if (nrf_modem_gnss_event_handler_set(gnss_event_handler) != 0) {
@@ -280,7 +404,7 @@ static int gnss_init_and_start(void)
     /* This use case flag should always be set. */
     uint8_t use_case = NRF_MODEM_GNSS_USE_CASE_MULTIPLE_HOT_START;
 
-    if (IS_ENABLED(CONFIG_GNSS_MODE_PERIODIC) && !IS_ENABLED(CONFIG_GNSS_ASSISTANCE_NONE)) {
+    if (IS_ENABLED(CONFIG_GNSS_SAMPLE_MODE_PERIODIC) && !IS_ENABLED(CONFIG_GNSS_SAMPLE_ASSISTANCE_NONE)) {
         /* Disable GNSS scheduled downloads when assistance is used. */
         use_case |= NRF_MODEM_GNSS_USE_CASE_SCHED_DOWNLOAD_DISABLE;
     }
@@ -289,13 +413,13 @@ static int gnss_init_and_start(void)
         LOG_WRN("Failed to set GNSS use case");
     }
 
-#if defined(CONFIG_GNSS_MODE_CONTINUOUS)
+#if defined(CONFIG_GNSS_SAMPLE_MODE_CONTINUOUS)
     /* Default to no power saving. */
     uint8_t power_mode = NRF_MODEM_GNSS_PSM_DISABLED;
 
-#    if defined(CONFIG_GNSS_POWER_SAVING_MODERATE)
+#    if defined(CONFIG_GNSS_SAMPLE_POWER_SAVING_MODERATE)
     power_mode = NRF_MODEM_GNSS_PSM_DUTY_CYCLING_PERFORMANCE;
-#    elif defined(CONFIG_GNSS_POWER_SAVING_HIGH)
+#    elif defined(CONFIG_GNSS_SAMPLE_POWER_SAVING_HIGH)
     power_mode = NRF_MODEM_GNSS_PSM_DUTY_CYCLING_POWER;
 #    endif
 
@@ -303,15 +427,15 @@ static int gnss_init_and_start(void)
         LOG_ERR("Failed to set GNSS power saving mode");
         return -1;
     }
-#endif /* CONFIG_GNSS_MODE_CONTINUOUS */
+#endif /* CONFIG_GNSS_SAMPLE_MODE_CONTINUOUS */
 
     /* Default to continuous tracking. */
     uint16_t fix_retry = 0;
     uint16_t fix_interval = 1;
 
-#if defined(CONFIG_GNSS_MODE_PERIODIC)
-    fix_retry = CONFIG_GNSS_PERIODIC_TIMEOUT;
-    fix_interval = CONFIG_GNSS_PERIODIC_INTERVAL;
+#if defined(CONFIG_GNSS_SAMPLE_MODE_PERIODIC)
+    fix_retry = CONFIG_GNSS_SAMPLE_PERIODIC_TIMEOUT;
+    fix_interval = CONFIG_GNSS_SAMPLE_PERIODIC_INTERVAL;
 #endif
 
     if (nrf_modem_gnss_fix_retry_set(fix_retry) != 0) {
@@ -411,25 +535,122 @@ static void print_fix_data(struct nrf_modem_gnss_pvt_data_frame* pvt_data)
 }
 
 // ---------------
+#include <zephyr/net/socket.h>
 
-int init2()
+#define SERVER_HOSTNAME "207.90.194.64"
+#define SERVER_PORT 6666
+#define RECV_BUF_SIZE 1024
+
+// --- HTTP Request Components ---
+// Note: \r\n is the standard line ending for HTTP
+static const char http_request_header[] = "POST /DATAINPUT HTTP/1.1\r\n"
+                                          "Host: " SERVER_HOSTNAME "\r\n"
+                                          "Authorization: Bearer ABC.123DEF\r\n"
+                                          "Content-Type: application/json\r\n"
+                                          "Content-Length: 15\r\n" // Length of the JSON body
+                                          "Connection: close\r\n\r\n";
+
+static const char http_body[] = "{\"test\": 123}";
+
+static char recv_buf[RECV_BUF_SIZE];
+
+int test_sending_data(void)
 {
+    lte_connect();
+
+    int fd; // Socket file descriptor
+    int err;
+    struct sockaddr_in addr;
+
+    // 1. Set up the server address
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(SERVER_PORT);
+    inet_pton(AF_INET, SERVER_HOSTNAME, &addr.sin_addr);
+
+    // 2. Open a TCP socket
+    fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (fd < 0) {
+        printk("Failed to create socket: %d\n", errno);
+        return -errno;
+    }
+    printk("Socket created.\n");
+
+    // 3. Connect to the server
+    err = connect(fd, (struct sockaddr*)&addr, sizeof(addr));
+    if (err < 0) {
+        printk("Failed to connect to server: %d\n", errno);
+        close(fd);
+        return -errno;
+    }
+    printk("Connected to server %s:%d\n", SERVER_HOSTNAME, SERVER_PORT);
+
+    // 4. Send the HTTP request (header + body)
+    err = send(fd, http_request_header, sizeof(http_request_header) - 1, 0);
+    if (err < 0) {
+        printk("Failed to send HTTP header: %d\n", errno);
+        close(fd);
+        return -errno;
+    }
+    err = send(fd, http_body, sizeof(http_body) - 1, 0);
+    if (err < 0) {
+        printk("Failed to send HTTP body: %d\n", errno);
+        close(fd);
+        return -errno;
+    }
+    printk("HTTP POST request sent.\n");
+
+    // 5. Receive the response
+    int bytes_received = recv(fd, recv_buf, sizeof(recv_buf) - 1, 0);
+    if (bytes_received < 0) {
+        printk("Failed to receive response: %d\n", errno);
+    } else if (bytes_received == 0) {
+        printk("Connection closed by server.\n");
+    } else {
+        recv_buf[bytes_received] = '\0'; // Null-terminate the string
+        printk("--- SERVER RESPONSE ---\n%s\n-----------------------\n", recv_buf);
+    }
+
+    // 6. Close the socket
+    close(fd);
+    printk("Socket closed.\n");
+
+    return 0;
+}
+
+// -------------------------
+
+int main(void)
+{
+    int err;
     uint8_t cnt = 0;
     struct nrf_modem_gnss_nmea_data_frame* nmea_data;
 
     LOG_INF("Starting GNSS sample");
 
+    err = nrf_modem_lib_init();
+    if (err) {
+        LOG_ERR("Modem library initialization failed, error: %d", err);
+        return err;
+    }
+
     /* Initialize reference coordinates (if used). */
-    // if (sizeof(CONFIG_GNSS_REFERENCE_LATITUDE) > 1 && sizeof(CONFIG_GNSS_REFERENCE_LONGITUDE) > 1) {
+    // if (sizeof(CONFIG_GNSS_SAMPLE_REFERENCE_LATITUDE) > 1 && sizeof(CONFIG_GNSS_SAMPLE_REFERENCE_LONGITUDE) > 1) {
     //     ref_used = true;
-    //     ref_latitude = atof(CONFIG_GNSS_REFERENCE_LATITUDE);
-    //     ref_longitude = atof(CONFIG_GNSS_REFERENCE_LONGITUDE);
+    //     ref_latitude = atof(CONFIG_GNSS_SAMPLE_REFERENCE_LATITUDE);
+    //     ref_longitude = atof(CONFIG_GNSS_SAMPLE_REFERENCE_LONGITUDE);
     // }
 
-    if (workqueue_init() != 0) {
-        LOG_ERR("Failed to initialize workqueue");
+    if (modem_init() != 0) {
+        LOG_ERR("Failed to initialize modem");
         return -1;
     }
+
+    if (sample_init() != 0) {
+        LOG_ERR("Failed to initialize sample");
+        return -1;
+    }
+
+    // test_sending_data();
 
     if (gnss_init_and_start() != 0) {
         LOG_ERR("Failed to initialize and start GNSS");
@@ -438,7 +659,6 @@ int init2()
 
     fix_timestamp = k_uptime_get();
 
-    // todo: needs to go into separate thread!
     for (;;) {
         (void)k_poll(events, 2, K_FOREVER);
 

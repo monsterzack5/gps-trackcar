@@ -1,3 +1,4 @@
+// TODO: NEED COPYRIGHT (Circuitdojo?)
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
