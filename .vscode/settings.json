@@ -61,7 +61,8 @@
         "sys_clock.h": "c",
         "lte_manager.h": "c",
         "nrf_modem_lib.h": "c",
-        "cerrno": "cpp"
+        "cerrno": "cpp",
+        "*.inc": "cpp"
     },
     "robot.language-server.python": "/home/zach/.pyenv/versions/3.13.3/bin/python3.13",
     "robot.variables": {

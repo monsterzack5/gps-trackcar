@@ -44,22 +44,17 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 #include "gps.h"
 #include "lte_manager.h"
+#include "networking.h"
 
 int main()
 {
-    int rc = lte_init();
+    int rc = networking_init();
 
     if (rc != 0) {
         LOG_ERR("Failed to init LTE, check sim card? rc = %d", rc);
         k_sleep(K_SECONDS(5));
         k_oops();
     }
-
-    // Now handle the GPS stuff
-    // First, init everything
-    // create a message queue for NMEA data
-    // ignore assistance for now.
-    // pass the sem to the file
 
     rc = gps_init();
 

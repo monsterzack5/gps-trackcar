@@ -520,7 +520,7 @@ static void print_fix_data(struct nrf_modem_gnss_pvt_data_frame* pvt_data)
     printf("Heading:           %.01f deg\n", (double)pvt_data->heading);
     printf("Heading accuracy:  %.01f deg\n", (double)pvt_data->heading_accuracy);
     printf("Date:              %04u-%02u-%02u\n",
-        pvt_data->datetime.year,
+        pvt_data->datewtime.year,
         pvt_data->datetime.month,
         pvt_data->datetime.day);
     printf("Time (UTC):        %02u:%02u:%02u.%03u\n",

@@ -1,5 +1,6 @@
 #include "gps.h"
 
+#include <modem/lte_lc.h>
 #include <nrf_modem_gnss.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -11,18 +12,34 @@ LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
 
 static int64_t last_uptime_sent = 0;
 
+static void print_flags(const nrf_modem_gnss_pvt_data_frame& pvt_data)
+{
+    if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_DEADLINE_MISSED) {
+        printf("GNSS operation blocked by LTE\n");
+    }
+    if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_NOT_ENOUGH_WINDOW_TIME) {
+        printf("Insufficient GNSS time windows\n");
+    }
+    if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_SLEEP_BETWEEN_PVT) {
+        printf("Sleep period(s) between PVT notifications\n");
+    }
+    if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_SCHED_DOWNLOAD) {
+        printf("Scheduled navigation data download\n");
+    }
+}
+
 static void gnss_event_handler(int event)
 {
     // TODO: Move to print func
     switch (event) {
     case NRF_MODEM_GNSS_EVT_PVT:
-        // LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_PVT");
+        LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_PVT");
         break;
     case NRF_MODEM_GNSS_EVT_FIX:
         LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_FIX");
         break;
     case NRF_MODEM_GNSS_EVT_NMEA:
-        // LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_NMEA");
+        LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_NMEA");
         break;
     case NRF_MODEM_GNSS_EVT_AGNSS_REQ:
         LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_AGNSS_REQ");
@@ -80,7 +97,12 @@ static void gnss_event_handler(int event)
 
         int pvt_rc = nrf_modem_gnss_read(&pvt_frame, sizeof(pvt_frame), event);
 
-        // printk("Flag bits:")
+        if (pvt_rc != 0) {
+            LOG_ERR("Failed to get pvt data!, rc = %d", pvt_rc);
+            break;
+        }
+
+        print_flags(pvt_frame);
 
         if (pvt_rc == 0 && pvt_frame.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID) {
 
@@ -95,17 +117,16 @@ static void gnss_event_handler(int event)
     }
 
     case NRF_MODEM_GNSS_EVT_FIX: {
+        // nrf_modem_gnss_nmea_data_frame frame_holder;
 
-        nrf_modem_gnss_nmea_data_frame frame_holder;
+        // rc = nrf_modem_gnss_read(&frame_holder, sizeof(frame_holder), NRF_MODEM_GNSS_DATA_NMEA);
+        // if (rc != 0) {
+        //     LOG_ERR("Got a FIX event for EVT_NMEA, but couldn't grab data!");
+        //     break;
+        // }
 
-        rc = nrf_modem_gnss_read(&frame_holder, sizeof(frame_holder), NRF_MODEM_GNSS_DATA_NMEA);
-        if (rc != 0) {
-            LOG_ERR("Got a FIX event for EVT_NMEA, but couldn't grab data!");
-            break;
-        }
-
-        // LOG_DBG("----------\n%s\n----------\n", frame_holder.nmea_str);
-        printk("FIX Data: %s", frame_holder.nmea_str);
+        // // LOG_DBG("----------\n%s\n----------\n", frame_holder.nmea_str);
+        // printk("FIX Data: %s", frame_holder.nmea_str);
 
         break;
     }
@@ -117,7 +138,8 @@ static void gnss_event_handler(int event)
 
 int gps_init()
 {
-    int rc = lte_set_modem_mode(ModemMode::connect_gps);
+    int rc = 0;
+    rc = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_ACTIVATE_GNSS);
 
     if (rc != 0) {
         // TODO: Log here or in super::?
@@ -128,7 +150,6 @@ int gps_init()
         LOG_ERR("Failed to set GNSS event handler");
         return -1;
     }
-
     uint16_t nmea_mask = NRF_MODEM_GNSS_NMEA_RMC_MASK | NRF_MODEM_GNSS_NMEA_GGA_MASK | NRF_MODEM_GNSS_NMEA_GLL_MASK | NRF_MODEM_GNSS_NMEA_GSA_MASK | NRF_MODEM_GNSS_NMEA_GSV_MASK;
     int mask_rc = nrf_modem_gnss_nmea_mask_set(nmea_mask);
     if (mask_rc != 0) {
@@ -178,6 +199,8 @@ int gps_init()
     if (prio_rc != 0) {
         LOG_ERR("Failed to set GPS Priority Mode");
     }
+
+    LOG_INF("GPS Initalized");
 
     return 0;
 }

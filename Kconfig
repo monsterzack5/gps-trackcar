@@ -6,119 +6,24 @@
 
 menu "GPS Tracker"
 
-choice
-	default GNSS_MODE_CONTINUOUS
-	prompt "Select GNSS operation mode"
+config TRACCAR_HOSTNAME
+    string "Server Hostname"
+    depends on NETWORKING
+    help
+        Url for traccar server, eg traccar.example.com
 
-config GNSS_MODE_CONTINUOUS
-	bool "Continuous tracking"
-
-config GNSS_MODE_PERIODIC
-	bool "Periodic fixes"
-
-endchoice
-
-if GNSS_MODE_PERIODIC
-
-config GNSS_PERIODIC_INTERVAL
-	int "Fix interval for periodic fixes"
-	range 10 65535
-	default 120
-	help
-	  Fix interval (in seconds) for periodic fixes.
-
-config GNSS_PERIODIC_TIMEOUT
-	int "Fix timeout for periodic fixes"
-	range 0 65535
-	default 120
-	help
-	  Fix timeout (in seconds) for periodic fixes.
-	  If set to zero, GNSS is allowed to run indefinitely until a valid PVT estimate is produced.
-
-endif # GNSS_MODE_PERIODIC
+config TRACCAR_PORT
+    string "Port"
+    depends on NETWORKING
+    help
+        Traccar Port
 
 endmenu
-
-choice
-	default GNSS_ASSISTANCE_NONE
-	prompt "Select whether GNSS assistance is used or not"
-
-config GNSS_ASSISTANCE_NONE
-	bool "Assistance not used"
-
-config GNSS_ASSISTANCE_MINIMAL
-	bool "Use factory almanac, LTE network time and MCC based location"
-	select GNSS_LTE_ON_DEMAND
-	select SETTINGS
-	select FCB
-	select FLASH
-	select FLASH_MAP
-
-endchoice
-
-if !GNSS_ASSISTANCE_NONE
-
-config GNSS_LTE_ON_DEMAND
-	bool "LTE is activated only when needed to fetch A-GNSS data"
-	depends on !NRF_CLOUD_PGPS
-	help
-	  Activates LTE only when it is needed to fetch A-GNSS data. This is not supported when
-	  P-GPS is enabled.
-
-endif # !GNSS_ASSISTANCE_NONE
-
-if GNSS_MODE_CONTINUOUS
-
-choice
-	default GNSS_POWER_SAVING_DISABLED
-	prompt "Select GNSS power saving mode (duty-cycling)"
-
-config GNSS_POWER_SAVING_DISABLED
-	bool "No power saving"
-
-config GNSS_POWER_SAVING_MODERATE
-	bool "Power saving without significant performance degradation"
-
-config GNSS_POWER_SAVING_HIGH
-	bool "Power saving with acceptable performance degradation"
-
-endchoice
-
-endif # GNSS_MODE_CONTINUOUS
-
-config GNSS_REFERENCE_LATITUDE
-	string "Reference position latitude in decimal degrees"
-	help
-	  When set, the sample calculates the distance from the reference position for each fix.
-	  Given in decimal degrees (DD), for example "61.500000".
-
-config GNSS_REFERENCE_LONGITUDE
-	string "Reference position longitude in decimal degrees"
-	help
-	  When set, the sample calculates the distance from the reference position for each fix.
-	  Given in decimal degrees (DD), for example "23.800000".
-
-config GNSS_LOW_ACCURACY
-	bool "Allow low accuracy fixes"
-	help
-	  Allows fixes with lower accuracy.
-
-if GNSS_ASSISTANCE_MINIMAL && GNSS_LOW_ACCURACY
-
-config GNSS_ASSISTANCE_REFERENCE_ALT
-	int "Reference altitude for 3-sat first fix in meters"
-	range -32767 32767
-	default -32767
-	help
-	  Reference altitude for 3-sat first fix in meters above the reference ellipsoid surface.
-	  The default value -32767 implies that reference altitude is not injected.
-
-endif # GNSS_ASSISTANCE_MINIMAL && GNSS_LOW_ACCURACY
 
 menu "Zephyr Kernel"
 source "Kconfig.zephyr"
 endmenu
 
-module = GNSS
-module-str = GNSS kconfig
+module = Tracker
+module-str = GPS Tracker Kconfig
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
