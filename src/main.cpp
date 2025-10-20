@@ -42,12 +42,14 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 //  - The assistance workqueue is used SOLELY to not block the main thread, since it can take some time
 //      - I am not sure if we need this system, it seems like a lot.
 
+#include "battery.h"
 #include "gps.h"
-#include "lte_manager.h"
 #include "networking.h"
 
 int main()
 {
+    battery_init();
+
     int rc = networking_init();
 
     if (rc != 0) {
@@ -68,6 +70,6 @@ int main()
 
     while (1) {
         k_sleep(K_SECONDS(5));
-        LOG_INF("Hello!");
+        get_battery_stats();
     }
 }

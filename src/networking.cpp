@@ -1,17 +1,15 @@
 #include "networking.h"
 
+#include <modem/modem_key_mgmt.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/net/socket.h>
-
-#include <modem/modem_key_mgmt.h>
 #include <zephyr/net/conn_mgr_connectivity.h>
 #include <zephyr/net/conn_mgr_monitor.h>
+#include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
 
-// #include <modem/nrf_modem_lib.h>
-
-// #include "lte_manager.h"
+#include "battery.h"
+#include "network_info.h"
 
 LOG_MODULE_REGISTER(networking, LOG_LEVEL_DBG);
 
@@ -83,9 +81,6 @@ int cert_provision(void)
 
 int tls_setup(int fd)
 {
-    int err;
-    int verify;
-
     /* Security tag that we have provisioned the certificate with */
     const sec_tag_t tls_sec_tag[] = {
         TLS_SEC_TAG,
@@ -98,9 +93,9 @@ int tls_setup(int fd)
         REQUIRED = 2,
     };
 
-    verify = REQUIRED;
+    int verify = REQUIRED;
 
-    err = setsockopt(fd, SOL_TLS, TLS_PEER_VERIFY, &verify, sizeof(verify));
+    int err = setsockopt(fd, SOL_TLS, TLS_PEER_VERIFY, &verify, sizeof(verify));
     if (err) {
         printk("Failed to setup peer verification, err %d\n", errno);
         return err;
@@ -121,40 +116,73 @@ int tls_setup(int fd)
         printk("Failed to setup TLS hostname, err %d\n", errno);
         return err;
     }
+
     return 0;
 }
 
-int send_packet(const nrf_modem_gnss_pvt_data_frame& frame)
+int send_packet(const traccar_params& params)
 {
-    // Build Packet
-    // Pass it to send_http_request
-
     // TODO: These are all too big!
-    char request_buffer[2048] = { 0 };
-    char query_string[1024] = { 0 };
+
+    // Request len: 189, Query Len: 80, iso len: 20
+
+    char request_buffer[1024] = { 0 };
+    char query_string[256] = { 0 };
     char iso8601_time[60] = { 0 };
     char receive_buffer[1024] = { 0 };
-
-    // Scary
-    memset(request_buffer, '\0', sizeof(request_buffer));
-    memset(query_string, '\0', sizeof(query_string));
-    memset(iso8601_time, '\0', sizeof(iso8601_time));
-    memset(receive_buffer, '\0', sizeof(receive_buffer));
-
-    // Build query string
-    // "/?id=123456&lat=48.8566&lon=2.3522&timestamp=1609459200000"
+    char network_info[256] = { 0 };
+    char charge[6] = { 0 };
 
     // Build timestamp
     snprintf(iso8601_time, sizeof(iso8601_time),
         "%04u-%02u-%02uT%02u:%02u:%02uZ",
-        frame.datetime.year,
-        frame.datetime.month,
-        frame.datetime.day,
-        frame.datetime.hour,
-        frame.datetime.minute,
-        frame.datetime.seconds);
-    // Build Query String
-    snprintf(query_string, sizeof(query_string), "/?id=%s&lat=%f&lon=%f&timestamp=%s", "112233", frame.latitude, frame.longitude, iso8601_time);
+        params.frame.datetime.year,
+        params.frame.datetime.month,
+        params.frame.datetime.day,
+        params.frame.datetime.hour,
+        params.frame.datetime.minute,
+        params.frame.datetime.seconds);
+
+    // Build network info
+    ProviderInfo info = get_provider_info();
+
+    snprintf(network_info, sizeof(network_info), "%u,%u,%u,%u,%u",
+        info.mcc,
+        info.mnc,
+        info.lac,
+        info.cellid,
+        info.signal_strength);
+
+    // TODO: Make actually work
+    // Build charge
+    snprintf(charge, sizeof(charge), "%s", "false");
+
+    // snprintf(query_string, sizeof(query_string), "/?id=%s&lat=%f&lon=%f&timestamp=%s", params.imei, params.frame.latitude, params.frame.longitude, iso8601_time);
+    float battery_level = get_battery_soc();
+    snprintf(query_string, sizeof(query_string),
+        "/?"
+        "id=%s"
+        "&lat=%f"
+        "&lon=%f"
+        "&accuracy=%f"
+        "&heading=%f"
+        "&altitude=%f"
+        "&timestamp=%s"
+        "&cell=%s"
+        "&batt=%f"
+        "&charge=%s"
+        "&temp=%f",
+        params.imei,
+        params.frame.latitude,
+        params.frame.longitude,
+        params.frame.accuracy,
+        params.frame.heading,
+        params.frame.altitude,
+        iso8601_time,
+        network_info,
+        battery_level,
+        charge,
+        info.temperature);
 
     // Build Request
     snprintf(request_buffer, sizeof(request_buffer),
@@ -167,12 +195,15 @@ int send_packet(const nrf_modem_gnss_pvt_data_frame& frame)
         query_string, CONFIG_TRACCAR_HOSTNAME, CONFIG_TRACCAR_PORT);
 
     size_t request_length = strnlen(request_buffer, sizeof(request_buffer));
+    size_t query_len = strnlen(query_string, sizeof(query_string));
+    size_t iso_len = strnlen(iso8601_time, sizeof(iso8601_time));
+    printk("Request len: %u, Query Len: %u, iso len: %u\n", request_length, query_len, iso_len);
 
     printk("Full Request:\n------------------\n%s\n------------------\n", request_buffer);
 
-    send_http_request(request_buffer, request_length, receive_buffer, sizeof(receive_buffer));
+    // send_http_request(request_buffer, request_length, receive_buffer, sizeof(receive_buffer));
 
-    // TODO:
+    // TODO: Error handling
     return 0;
 }
 
@@ -180,7 +211,6 @@ static void send_http_request(char* request_body, size_t request_length, char* r
 {
 
     // Make sure we're connected
-
     set_networking_state(NetworkState::Connected);
 
     printk("Looking up %s\n", CONFIG_TRACCAR_HOSTNAME);
@@ -359,10 +389,12 @@ int networking_init()
     net_mgmt_init_event_callback(&conn_cb, connectivity_event_handler, (NET_EVENT_CONN_IF_FATAL_ERROR));
     net_mgmt_add_event_callback(&conn_cb);
 
-    int rc = 0;
+    network_info_init();
 
     // TODO: Better error handling
+
     // Activate (but don't connect) the modem
+    int rc = 0;
     rc |= set_networking_state(NetworkState::Activated);
     rc |= cert_provision();
 

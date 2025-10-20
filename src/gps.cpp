@@ -5,41 +5,148 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-#include "lte_manager.h"
+#include "assistance.h"
+#include "battery.h"
+#include "network_info.h"
 #include "networking.h"
 
 LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
 
-static int64_t last_uptime_sent = 0;
+// ----
+// GNSS Workqueue
+// For offloading tasks from callbacks that run in ISR context.
+static k_work_q pvt_data_workqueue;
 
-static void print_flags(const nrf_modem_gnss_pvt_data_frame& pvt_data)
+// Might need more stack space, this workqueue sends network requests.
+K_THREAD_STACK_DEFINE(pvt_data_workqueue_stack, (1024 * 6));
+// For handling GPS fix events
+void pvt_data_handler_fn(k_work* work);
+struct pvt_work_struct {
+    k_work work;
+    nrf_modem_gnss_pvt_data_frame pvt_frame;
+};
+static pvt_work_struct pvt_data_work;
+
+// For handling assistance data
+
+struct assistance_work_struct {
+    k_work work;
+    nrf_modem_gnss_agnss_data_frame agnss_frame;
+};
+static assistance_work_struct assistance_work;
+
+// ----
+
+// static void print_flags(const nrf_modem_gnss_pvt_data_frame& pvt_data)
+// {
+//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID) {
+//         printk(" NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID");
+//     }
+//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_LEAP_SECOND_VALID) {
+//         printk(" NRF_MODEM_GNSS_PVT_FLAG_LEAP_SECOND_VALID");
+//     }
+//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_SLEEP_BETWEEN_PVT) {
+//         printk(" NRF_MODEM_GNSS_PVT_FLAG_SLEEP_BETWEEN_PVT");
+//     }
+//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_DEADLINE_MISSED) {
+//         printk(" NRF_MODEM_GNSS_PVT_FLAG_DEADLINE_MISSED");
+//     }
+//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_NOT_ENOUGH_WINDOW_TIME) {
+//         printk(" NRF_MODEM_GNSS_PVT_FLAG_NOT_ENOUGH_WINDOW_TIME");
+//     }
+//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_VELOCITY_VALID) {
+//         printk(" NRF_MODEM_GNSS_PVT_FLAG_VELOCITY_VALID");
+//     }
+//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_SCHED_DOWNLOAD) {
+//         printk(" NRF_MODEM_GNSS_PVT_FLAG_SCHED_DOWNLOAD");
+//     }
+//     printk("\n");
+// }
+
+static int64_t last_uptime_sent = 0;
+void pvt_data_handler_fn(k_work* work_item)
 {
-    if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_DEADLINE_MISSED) {
-        printf("GNSS operation blocked by LTE\n");
+    LOG_DBG("Handling Packet");
+    pvt_work_struct* data = CONTAINER_OF(work_item, struct pvt_work_struct, work);
+
+    int64_t uptime = k_uptime_get();
+    // const char* imei = get_imei(imei_len);
+
+    if (uptime - last_uptime_sent >= (int64_t)60000) {
+
+        traccar_params params {
+            // todo: not get imei here
+            .imei = get_imei(),
+            .frame = data->pvt_frame,
+            .battery_percent = get_battery_soc(),
+        };
+
+        send_packet(params);
+        last_uptime_sent = uptime;
+    } else {
+        LOG_WRN("Not sending request due to timeout");
     }
-    if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_NOT_ENOUGH_WINDOW_TIME) {
-        printf("Insufficient GNSS time windows\n");
+}
+
+void assistance_handler_fn(k_work* work_item)
+{
+    assistance_work_struct* data = CONTAINER_OF(work_item, struct assistance_work_struct, work);
+
+    int err = assistance_request(&data->agnss_frame);
+    if (err) {
+        LOG_ERR("Failed to request assistance data, err = %d", err);
     }
-    if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_SLEEP_BETWEEN_PVT) {
-        printf("Sleep period(s) between PVT notifications\n");
+}
+
+static void check_for_modem_pvt_errors(const nrf_modem_gnss_pvt_data_frame& frame)
+{
+    if (frame.flags & NRF_MODEM_GNSS_PVT_FLAG_DEADLINE_MISSED) {
+        LOG_WRN("!! Missed Deadline");
     }
-    if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_SCHED_DOWNLOAD) {
-        printf("Scheduled navigation data download\n");
+    if (frame.flags & NRF_MODEM_GNSS_PVT_FLAG_NOT_ENOUGH_WINDOW_TIME) {
+        LOG_WRN("!! Not Enough Window Time");
     }
+    if (frame.flags & NRF_MODEM_GNSS_SV_FLAG_UNHEALTHY) {
+        LOG_WRN("Sat Unhealthy");
+    }
+}
+
+static void print_satellite_stats(const nrf_modem_gnss_pvt_data_frame& pvt_data)
+{
+    uint8_t tracked = 0;
+    uint8_t in_fix = 0;
+    uint8_t unhealthy = 0;
+
+    for (int i = 0; i < NRF_MODEM_GNSS_MAX_SATELLITES; ++i) {
+        if (pvt_data.sv[i].sv > 0) {
+            tracked++;
+
+            if (pvt_data.sv[i].flags & NRF_MODEM_GNSS_SV_FLAG_USED_IN_FIX) {
+                in_fix++;
+            }
+
+            if (pvt_data.sv[i].flags & NRF_MODEM_GNSS_SV_FLAG_UNHEALTHY) {
+                unhealthy++;
+            }
+        }
+    }
+
+    printf("Tracking: %2d Using: %2d Unhealthy: %d\n", tracked, in_fix, unhealthy);
 }
 
 static void gnss_event_handler(int event)
 {
+
     // TODO: Move to print func
     switch (event) {
     case NRF_MODEM_GNSS_EVT_PVT:
-        LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_PVT");
+        // LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_PVT");
         break;
     case NRF_MODEM_GNSS_EVT_FIX:
         LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_FIX");
         break;
     case NRF_MODEM_GNSS_EVT_NMEA:
-        LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_NMEA");
+        // LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_NMEA");
         break;
     case NRF_MODEM_GNSS_EVT_AGNSS_REQ:
         LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_AGNSS_REQ");
@@ -64,70 +171,40 @@ static void gnss_event_handler(int event)
         break;
     }
 
-    // TODO: handle better
-    int rc = 0;
-
     switch (event) {
-    case NRF_MODEM_GNSS_EVT_NMEA: {
-
-        // Ignore just NMEA Bytes for now, focus on PVT (PVT Packets contain post-processed NMEA bytes)
-        break;
-        // We got NMEA Data!
-        // TODO: put that bad boy into a message queue
-        // For now, just print it.
-
-        // evil
-        nrf_modem_gnss_nmea_data_frame frame_holder;
-
-        rc = nrf_modem_gnss_read(&frame_holder, sizeof(frame_holder), NRF_MODEM_GNSS_DATA_NMEA);
-        if (rc != 0) {
-            LOG_ERR("Got an event for EVT_NMEA, but couldn't grab data!");
-            break;
-        }
-
-        // LOG_DBG("----------\n%s\n----------\n", frame_holder.nmea_str);
-        printk("NMEA Data: %s", frame_holder.nmea_str);
-
-        break;
-    }
-
     case NRF_MODEM_GNSS_EVT_PVT: {
+        static uint32_t pvt_events_handled = 0;
+
+        pvt_events_handled += 1;
+
+        if (pvt_events_handled % 100 == 0) {
+            LOG_DBG("Handled %u PVT events, so far", pvt_events_handled);
+        }
 
         nrf_modem_gnss_pvt_data_frame pvt_frame;
 
         int pvt_rc = nrf_modem_gnss_read(&pvt_frame, sizeof(pvt_frame), event);
 
-        if (pvt_rc != 0) {
-            LOG_ERR("Failed to get pvt data!, rc = %d", pvt_rc);
-            break;
+        check_for_modem_pvt_errors(pvt_frame);
+        if (pvt_events_handled % 10 == 0) {
+            print_satellite_stats(pvt_frame);
         }
 
-        print_flags(pvt_frame);
-
-        if (pvt_rc == 0 && pvt_frame.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID) {
-
-            if (last_uptime_sent + (int64_t)60000 > k_uptime_get()) {
-                send_packet(pvt_frame);
-                last_uptime_sent = k_uptime_get();
-                LOG_INF("Sent Packet!");
-            }
+        if (pvt_rc == 0 && (pvt_frame.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID)) {
+            pvt_data_work.pvt_frame = pvt_frame;
+            LOG_DBG("Submitting frame to queue");
+            k_work_submit_to_queue(&pvt_data_workqueue, &pvt_data_work.work);
         }
 
         break;
     }
 
-    case NRF_MODEM_GNSS_EVT_FIX: {
-        // nrf_modem_gnss_nmea_data_frame frame_holder;
-
-        // rc = nrf_modem_gnss_read(&frame_holder, sizeof(frame_holder), NRF_MODEM_GNSS_DATA_NMEA);
-        // if (rc != 0) {
-        //     LOG_ERR("Got a FIX event for EVT_NMEA, but couldn't grab data!");
-        //     break;
-        // }
-
-        // // LOG_DBG("----------\n%s\n----------\n", frame_holder.nmea_str);
-        // printk("FIX Data: %s", frame_holder.nmea_str);
-
+    // Modem is requesting assistance data.
+    case NRF_MODEM_GNSS_EVT_AGNSS_REQ: {
+        int retval = nrf_modem_gnss_read(&assistance_work.agnss_frame, sizeof(assistance_work.agnss_frame), NRF_MODEM_GNSS_DATA_AGNSS_REQ);
+        if (retval == 0) {
+            k_work_submit_to_queue(&pvt_data_workqueue, &assistance_work.work);
+        }
         break;
     }
 
@@ -136,13 +213,31 @@ static void gnss_event_handler(int event)
     }
 }
 
+static void workqueue_init()
+{
+    struct k_work_queue_config cfg = {
+        .name = "gnss_work_q",
+        .no_yield = false
+    };
+
+    k_work_queue_init(&pvt_data_workqueue);
+    k_work_queue_start(&pvt_data_workqueue, pvt_data_workqueue_stack, K_THREAD_STACK_SIZEOF(pvt_data_workqueue_stack), 5, &cfg);
+    k_work_init(&pvt_data_work.work, pvt_data_handler_fn);
+    k_work_init(&assistance_work.work, assistance_handler_fn);
+}
+
 int gps_init()
 {
     int rc = 0;
+
+    workqueue_init();
+    assistance_init();
+
+    // Enable GPS mode in the modem
     rc = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_ACTIVATE_GNSS);
 
     if (rc != 0) {
-        // TODO: Log here or in super::?
+        LOG_ERR("Failed to set GPS mode in modem, rc = %d", rc);
         return -1;
     }
 
@@ -150,6 +245,7 @@ int gps_init()
         LOG_ERR("Failed to set GNSS event handler");
         return -1;
     }
+
     uint16_t nmea_mask = NRF_MODEM_GNSS_NMEA_RMC_MASK | NRF_MODEM_GNSS_NMEA_GGA_MASK | NRF_MODEM_GNSS_NMEA_GLL_MASK | NRF_MODEM_GNSS_NMEA_GSA_MASK | NRF_MODEM_GNSS_NMEA_GSV_MASK;
     int mask_rc = nrf_modem_gnss_nmea_mask_set(nmea_mask);
     if (mask_rc != 0) {
@@ -157,28 +253,20 @@ int gps_init()
         return -1;
     }
 
-    // TODO: Don't think we need this?
-    /* Make QZSS satellites visible in the NMEA output. */
-    // if (nrf_modem_gnss_qzss_nmea_mode_set(NRF_MODEM_GNSS_QZSS_NMEA_MODE_CUSTOM) != 0) {
-    //     LOG_WRN("Failed to enable custom QZSS NMEA mode");
-    // }
-
     uint8_t use_case = NRF_MODEM_GNSS_USE_CASE_MULTIPLE_HOT_START;
-
     if (nrf_modem_gnss_use_case_set(use_case) != 0) {
         LOG_WRN("Failed to set GNSS use case");
     }
 
     // TODO:
-    // Timeout in seconds for tracking, should be set from kconfig
-
     // Using these defaults will give us continuous tracking
     uint16_t fix_retry = 0;
     uint16_t fix_interval = 0;
 
-    fix_retry = 120;
-    fix_interval = 120;
+    // fix_retry = 120;
+    // fix_interval = 120;
 
+    // TODO: Set these based on if we're moving, if we're stopped, battery low, etc...
     if (nrf_modem_gnss_fix_retry_set(fix_retry) != 0) {
         LOG_ERR("Failed to set GNSS fix retry");
         return -1;

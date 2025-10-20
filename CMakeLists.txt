@@ -21,10 +21,12 @@ target_sources(app PRIVATE
     src/startup.c
 
     src/gps.cpp
+    src/assistance.c
+    src/network_info.cpp
+    
     src/networking.cpp
 
-    # src/gps/assistance_minimal.cpp
-    # src/gps/mcc_location_table.cpp
+    src/battery.cpp
 )
 
 

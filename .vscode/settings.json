@@ -62,10 +62,8 @@
         "lte_manager.h": "c",
         "nrf_modem_lib.h": "c",
         "cerrno": "cpp",
-        "*.inc": "cpp"
+        "*.inc": "cpp",
+        "compare": "c",
+        "stdio.h": "c"
     },
-    "robot.language-server.python": "/home/zach/.pyenv/versions/3.13.3/bin/python3.13",
-    "robot.variables": {
-        "RENODEKEYWORDS": "/home/zach/Projects/Farmblox/Projects/renode/proxy/renode_1.15.3+20250530git063124cbc-dotnet_portable/tests/renode-keywords.robot"
-    }
 }
