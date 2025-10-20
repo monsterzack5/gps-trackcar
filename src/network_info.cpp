@@ -58,7 +58,7 @@ static float get_modem_str_and_convert_float(char* buffer, size_t buffer_size, m
 {
     int length = modem_info_string_get(modem_identifier, buffer, buffer_size);
     if (length < 0) {
-        LOG_ERR("modem_info_string_get failed, rc = %d", length);
+        LOG_ERR("modem_info_string_get failed, rc = %d, str ident: %d", length, (int)modem_identifier);
         return 0;
     }
 

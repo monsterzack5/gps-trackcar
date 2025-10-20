@@ -126,8 +126,8 @@ int send_packet(const traccar_params& params)
 
     // Request len: 189, Query Len: 80, iso len: 20
 
-    char request_buffer[1024] = { 0 };
-    char query_string[256] = { 0 };
+    char request_buffer[3096] = { 0 };
+    char query_string[1024] = { 0 };
     char iso8601_time[60] = { 0 };
     char receive_buffer[1024] = { 0 };
     char network_info[256] = { 0 };
@@ -164,25 +164,25 @@ int send_packet(const traccar_params& params)
         "id=%s"
         "&lat=%f"
         "&lon=%f"
-        "&accuracy=%f"
-        "&heading=%f"
-        "&altitude=%f"
+        "&accuracy=%.1f"
+        "&heading=%.1f"
+        "&altitude=%.2f"
         "&timestamp=%s"
         "&cell=%s"
-        "&batt=%f"
+        "&batt=%.1f"
         "&charge=%s"
-        "&temp=%f",
+        "&temp=%.1f",
         params.imei,
         params.frame.latitude,
         params.frame.longitude,
-        params.frame.accuracy,
-        params.frame.heading,
-        params.frame.altitude,
+        (double)params.frame.accuracy,
+        (double)params.frame.heading,
+        (double)params.frame.altitude,
         iso8601_time,
         network_info,
-        battery_level,
+        (double)battery_level,
         charge,
-        info.temperature);
+        (double)info.temperature);
 
     // Build Request
     snprintf(request_buffer, sizeof(request_buffer),
@@ -197,11 +197,21 @@ int send_packet(const traccar_params& params)
     size_t request_length = strnlen(request_buffer, sizeof(request_buffer));
     size_t query_len = strnlen(query_string, sizeof(query_string));
     size_t iso_len = strnlen(iso8601_time, sizeof(iso8601_time));
-    printk("Request len: %u, Query Len: %u, iso len: %u\n", request_length, query_len, iso_len);
+    size_t network_info_len = strnlen(network_info, sizeof(network_info));
+    LOG_INF("Request len: %u, Query Len: %u, iso len: %u network info: %u\n", request_length, query_len, iso_len, network_info_len);
 
-    printk("Full Request:\n------------------\n%s\n------------------\n", request_buffer);
+    // size_t printed = 0;
+    // size_t how_many_to_print = 30;
+    // // printk("%.*s", length_to_print, rx_buffer);
+    // do {
+    //     LOG_DBG("%.*s", how_many_to_print, &request_buffer[printed]);
+    //     printed += 30;
+    //     if (request_length < how_many_to_print) {
+    //         how_many_to_print = request_length;
+    //     }
+    // } while (printed < request_length);
 
-    // send_http_request(request_buffer, request_length, receive_buffer, sizeof(receive_buffer));
+    send_http_request(request_buffer, request_length, receive_buffer, sizeof(receive_buffer));
 
     // TODO: Error handling
     return 0;

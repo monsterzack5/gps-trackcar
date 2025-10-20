@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
 static k_work_q pvt_data_workqueue;
 
 // Might need more stack space, this workqueue sends network requests.
-K_THREAD_STACK_DEFINE(pvt_data_workqueue_stack, (1024 * 6));
+K_THREAD_STACK_DEFINE(pvt_data_workqueue_stack, (1024 * 10));
 // For handling GPS fix events
 void pvt_data_handler_fn(k_work* work);
 struct pvt_work_struct {
@@ -72,7 +72,7 @@ void pvt_data_handler_fn(k_work* work_item)
     int64_t uptime = k_uptime_get();
     // const char* imei = get_imei(imei_len);
 
-    if (uptime - last_uptime_sent >= (int64_t)60000) {
+    if (uptime - last_uptime_sent >= (int64_t)30000) {
 
         traccar_params params {
             // todo: not get imei here
@@ -263,8 +263,8 @@ int gps_init()
     uint16_t fix_retry = 0;
     uint16_t fix_interval = 0;
 
-    // fix_retry = 120;
-    // fix_interval = 120;
+    fix_retry = 120;
+    fix_interval = 120;
 
     // TODO: Set these based on if we're moving, if we're stopped, battery low, etc...
     if (nrf_modem_gnss_fix_retry_set(fix_retry) != 0) {

@@ -89,5 +89,7 @@ void get_battery_stats()
     sensor_channel_get(pmic, SENSOR_CHAN_GAUGE_AVG_CURRENT, &value);
     double current = (float)value.val1 + ((float)value.val2 / 1000000);
 
-    LOG_INF("Battery Voltage: %f, Average Current: %f", voltage, current);
+    if (voltage > (double)2.9f) {
+        LOG_INF("Battery Voltage: %f, Average Current: %f", voltage, current);
+    }
 }
