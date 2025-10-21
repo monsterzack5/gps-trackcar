@@ -9,6 +9,11 @@ project(gps-tracker-test)
 # Convert certificate to hex file
 set(gen_dir ${CMAKE_CURRENT_BINARY_DIR}/certs)
 zephyr_include_directories(${gen_dir})
+
+zephyr_include_directories(src/gps)
+zephyr_include_directories(src/networking)
+zephyr_include_directories(src/sensors)
+
 generate_inc_file_for_target(
     app
     cert/LetsEncryptCert.pem
@@ -20,14 +25,14 @@ target_sources(app PRIVATE
     src/main.cpp
     src/startup.c
 
-    src/gps.cpp
-    src/assistance.c
+    src/gps/gps.cpp
+    src/gps/assistance.c
     
-    src/network_info.cpp
-    src/networking.cpp
-    src/dns.cpp
+    src/networking/network_info.cpp
+    src/networking/networking.cpp
+    src/networking/dns.cpp
 
-    src/battery.cpp
+    src/sensors/battery.cpp
 )
 
 
