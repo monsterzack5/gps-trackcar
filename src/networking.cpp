@@ -9,6 +9,7 @@
 #include <zephyr/net/tls_credentials.h>
 
 #include "battery.h"
+#include "dns.h"
 #include "network_info.h"
 
 LOG_MODULE_REGISTER(networking, LOG_LEVEL_DBG);
@@ -223,31 +224,13 @@ static void send_http_request(char* request_body, size_t request_length, char* r
     // Make sure we're connected
     set_networking_state(NetworkState::Connected);
 
-    printk("Looking up %s\n", CONFIG_TRACCAR_HOSTNAME);
+    addrinfo* res = resolve_dns_with_caching(CONFIG_TRACCAR_HOSTNAME, CONFIG_TRACCAR_PORT);
 
-    const addrinfo hints = {
-        .ai_flags = AI_NUMERICSERV, /* Let getaddrinfo() set port */
-        .ai_socktype = SOCK_STREAM,
-    };
-
-    addrinfo* res;
-    int err = getaddrinfo(CONFIG_TRACCAR_HOSTNAME, CONFIG_TRACCAR_PORT, &hints, &res);
-    if (err) {
-        printk("getaddrinfo() failed, err %d\n", errno);
-        return;
+    if (res == nullptr) {
+        // Failed to resolve, fail now.
+        set_networking_state(NetworkState::Disconnected);
     }
 
-    // Does this only work with IPv6?
-    char peer_addr[INET6_ADDRSTRLEN];
-    inet_ntop(res->ai_family, &((struct sockaddr_in*)(res->ai_addr))->sin_addr, peer_addr, INET6_ADDRSTRLEN);
-
-    // TODO: Cache this
-    LOG_DBG("Resolved %s (%s)\n", peer_addr, net_family2str(res->ai_family));
-
-    // if (IS_ENABLED(CONFIG_SAMPLE_TFM_MBEDTLS)) {
-    // fd = socket(res->ai_family, SOCK_STREAM | SOCK_NATIVE_TLS, IPPROTO_TLS_1_2);
-    // } else {
-    // }
     int fd = socket(res->ai_family, SOCK_STREAM, IPPROTO_TLS_1_2);
 
     const auto cleanup = [&]() {
@@ -261,7 +244,7 @@ static void send_http_request(char* request_body, size_t request_length, char* r
     }
 
     /* Setup TLS socket options */
-    err = tls_setup(fd);
+    int err = tls_setup(fd);
     if (err) {
         return cleanup();
     }
@@ -341,6 +324,15 @@ static struct net_mgmt_event_callback l4_cb;
 // TODO: Should it?
 int set_networking_state(NetworkState state)
 {
+    // ---- Calling conn_up on the same state can be slow
+    static auto current_state = NetworkState::Deactivated;
+
+    if (current_state == state) {
+        return 0;
+    }
+
+    current_state = state;
+    // ----
 
     int rc = 0;
 

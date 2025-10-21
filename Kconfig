@@ -18,6 +18,14 @@ config TRACCAR_PORT
     help
         Traccar Port
 
+
+config DNS_CACHE_ENTRIES 
+    int "Cache entries"
+    range 1 10
+    default 3
+    help
+        amount of URL's DNS queries to cache
+
 endmenu
 
 menu "Zephyr Kernel"

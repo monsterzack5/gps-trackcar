@@ -64,6 +64,7 @@
         "cerrno": "cpp",
         "*.inc": "cpp",
         "compare": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "syscall_handler.h": "c"
     },
 }

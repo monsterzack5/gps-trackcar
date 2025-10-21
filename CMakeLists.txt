@@ -22,9 +22,10 @@ target_sources(app PRIVATE
 
     src/gps.cpp
     src/assistance.c
-    src/network_info.cpp
     
+    src/network_info.cpp
     src/networking.cpp
+    src/dns.cpp
 
     src/battery.cpp
 )
