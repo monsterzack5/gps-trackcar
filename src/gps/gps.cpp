@@ -12,16 +12,6 @@
 
 LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
 
-// ----
-// GNSS Workqueue
-// For offloading tasks from callbacks that run in ISR context.
-static k_work_q pvt_data_workqueue;
-
-// Might need more stack space, this workqueue sends network requests.
-// TODO: We're offloading this in the network requests, this workqueue does not need
-// this much stack anymore. We could also use the system workqueue pretty easily.
-K_THREAD_STACK_DEFINE(pvt_data_workqueue_stack, (1024 * 4));
-
 // For handling GPS fix events
 void pvt_data_handler_fn(k_work* work);
 struct pvt_work_struct {
@@ -188,7 +178,7 @@ static void gnss_event_handler(int event)
         if (pvt_rc == 0 && (pvt_frame.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID)) {
             pvt_data_work.pvt_frame = pvt_frame;
             LOG_DBG("Submitting frame to queue");
-            k_work_submit_to_queue(&pvt_data_workqueue, &pvt_data_work.work);
+            k_work_submit(&pvt_data_work.work);
         }
 
         break;
@@ -198,7 +188,7 @@ static void gnss_event_handler(int event)
     case NRF_MODEM_GNSS_EVT_AGNSS_REQ: {
         int retval = nrf_modem_gnss_read(&assistance_work.agnss_frame, sizeof(assistance_work.agnss_frame), NRF_MODEM_GNSS_DATA_AGNSS_REQ);
         if (retval == 0) {
-            k_work_submit_to_queue(&pvt_data_workqueue, &assistance_work.work);
+            k_work_submit(&assistance_work.work);
         }
         break;
     }
@@ -208,15 +198,8 @@ static void gnss_event_handler(int event)
     }
 }
 
-static void workqueue_init()
+static void work_init()
 {
-    struct k_work_queue_config cfg = {
-        .name = "gnss_work_q",
-        .no_yield = false
-    };
-
-    k_work_queue_init(&pvt_data_workqueue);
-    k_work_queue_start(&pvt_data_workqueue, pvt_data_workqueue_stack, K_THREAD_STACK_SIZEOF(pvt_data_workqueue_stack), 5, &cfg);
     k_work_init(&pvt_data_work.work, pvt_data_handler_fn);
     k_work_init(&assistance_work.work, assistance_handler_fn);
 }
@@ -225,7 +208,7 @@ int gps_init()
 {
     int rc = 0;
 
-    workqueue_init();
+    work_init();
     assistance_init();
 
     // Enable GPS mode in the modem
