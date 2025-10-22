@@ -45,12 +45,16 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #include "battery.h"
 #include "connectivity.h"
 #include "gps.h"
+#include "network_info.h"
+#include "network_requests.h"
 
 int main()
 {
     battery_init();
 
     int rc = networking_init();
+    network_info_init();
+    network_requests_init();
 
     if (rc != 0) {
         LOG_ERR("Failed to init LTE, check sim card? rc = %d", rc);

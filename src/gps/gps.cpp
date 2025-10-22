@@ -58,14 +58,10 @@ static assistance_work_struct assistance_work;
 static int64_t last_uptime_sent = 0;
 void pvt_data_handler_fn(k_work* work_item)
 {
-    LOG_DBG("Handling Packet");
     pvt_work_struct* data = CONTAINER_OF(work_item, struct pvt_work_struct, work);
 
     int64_t uptime = k_uptime_get();
-    // const char* imei = get_imei(imei_len);
-
     if (uptime - last_uptime_sent >= (int64_t)30000) {
-
         send_gps_update(data->pvt_frame);
         last_uptime_sent = uptime;
     } else {
@@ -92,7 +88,7 @@ static void check_for_modem_pvt_errors(const nrf_modem_gnss_pvt_data_frame& fram
         LOG_WRN("!! Not Enough Window Time");
     }
     if (frame.flags & NRF_MODEM_GNSS_SV_FLAG_UNHEALTHY) {
-        LOG_WRN("Sat Unhealthy");
+        LOG_WRN("!! Sat Unhealthy");
     }
 }
 

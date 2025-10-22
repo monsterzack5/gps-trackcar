@@ -119,9 +119,6 @@ int networking_init()
     net_mgmt_init_event_callback(&conn_cb, connectivity_event_handler, (NET_EVENT_CONN_IF_FATAL_ERROR));
     net_mgmt_add_event_callback(&conn_cb);
 
-    // TODO: Call this somewhere better?
-    network_info_init();
-
     // TODO: Better error handling
 
     // Activate (but don't connect) the modem

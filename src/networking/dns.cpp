@@ -18,7 +18,11 @@ static DnsQuery cached_entries[CONFIG_DNS_CACHE_ENTRIES] = {};
 
 static void print_resolved_address(addrinfo* address)
 {
-    char peer_addr[MAX(INET6_ADDRSTRLEN, INET_ADDRSTRLEN)];
+    char peer_addr[INET6_ADDRSTRLEN];
+
+    if (address == nullptr) {
+        return;
+    }
 
     // IPv4
     if (address->ai_family == AF_INET) {
@@ -55,6 +59,7 @@ static int actually_resolve(DnsQuery* query)
 
     if (query->info_ptr != nullptr) {
         freeaddrinfo(query->info_ptr);
+        query->info_ptr = nullptr;
     }
 
     int err = getaddrinfo(query->name, query->port, &hints, &query->info_ptr);
@@ -93,11 +98,13 @@ static int clear_least_recently_used()
 
     if (query->info_ptr != nullptr) {
         freeaddrinfo(cached_entries[least_used_query_index].info_ptr);
+        query->info_ptr = nullptr;
     }
 
     return least_used_query_index;
 }
 
+//
 addrinfo* resolve_dns_with_caching(const char* url, const char* port, bool force_invalidate)
 {
     // Try to find the name in the array
@@ -112,20 +119,18 @@ addrinfo* resolve_dns_with_caching(const char* url, const char* port, bool force
         }
     }
 
-    int first_free = -1;
     if (current_query == nullptr) {
-        first_free = find_first_free_cache_slot();
+        int first_free = find_first_free_cache_slot();
         if (first_free == -1) {
             LOG_ERR("No more DNS Cache entries available, clearing least recently used cache!");
             first_free = clear_least_recently_used();
         }
 
-        // Store it
-        strncpy(cached_entries[first_free].name, url, URL_MAX_SIZE - 1);
-        strncpy(cached_entries[first_free].port, port, PORT_MAX_SIZE - 1);
+        LOG_DBG("Using dns cache slot %u for url %s", first_free, url);
 
-        cached_entries[first_free].name[URL_MAX_SIZE - 1] = '\0';
-        cached_entries[first_free].port[PORT_MAX_SIZE - 1] = '\0';
+        // Store it
+        snprintf(cached_entries[first_free].name, URL_MAX_SIZE, "%s", url);
+        snprintf(cached_entries[first_free].port, PORT_MAX_SIZE, "%s", port);
 
         cached_entries[first_free].lookup_time = k_uptime_get();
 
@@ -139,8 +144,9 @@ addrinfo* resolve_dns_with_caching(const char* url, const char* port, bool force
 
     // Return cached query if we're not told to invalidate, and the last query is less than 10 hours
     // 12 Hours
-    if (((delta < 43200000ll) && !force_invalidate) && current_query->info_ptr != nullptr) {
+    if ((delta < 43200000ll) && !force_invalidate && current_query->info_ptr != nullptr) {
         LOG_DBG("Using cached DNS entry for %s", current_query->name);
+        print_resolved_address(current_query->info_ptr);
         return current_query->info_ptr;
     }
 
