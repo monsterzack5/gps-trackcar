@@ -43,8 +43,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 //      - I am not sure if we need this system, it seems like a lot.
 
 #include "battery.h"
+#include "connectivity.h"
 #include "gps.h"
-#include "networking.h"
 
 int main()
 {

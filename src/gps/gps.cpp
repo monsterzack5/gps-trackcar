@@ -8,7 +8,7 @@
 #include "assistance.h"
 #include "battery.h"
 #include "network_info.h"
-#include "networking.h"
+#include "network_requests.h"
 
 LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
 
@@ -18,7 +18,10 @@ LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
 static k_work_q pvt_data_workqueue;
 
 // Might need more stack space, this workqueue sends network requests.
-K_THREAD_STACK_DEFINE(pvt_data_workqueue_stack, (1024 * 10));
+// TODO: We're offloading this in the network requests, this workqueue does not need
+// this much stack anymore. We could also use the system workqueue pretty easily.
+K_THREAD_STACK_DEFINE(pvt_data_workqueue_stack, (1024 * 4));
+
 // For handling GPS fix events
 void pvt_data_handler_fn(k_work* work);
 struct pvt_work_struct {
@@ -28,7 +31,6 @@ struct pvt_work_struct {
 static pvt_work_struct pvt_data_work;
 
 // For handling assistance data
-
 struct assistance_work_struct {
     k_work work;
     nrf_modem_gnss_agnss_data_frame agnss_frame;
@@ -74,14 +76,7 @@ void pvt_data_handler_fn(k_work* work_item)
 
     if (uptime - last_uptime_sent >= (int64_t)30000) {
 
-        traccar_params params {
-            // todo: not get imei here
-            .imei = get_imei(),
-            .frame = data->pvt_frame,
-            .battery_percent = get_battery_soc(),
-        };
-
-        send_packet(params);
+        send_gps_update(data->pvt_frame);
         last_uptime_sent = uptime;
     } else {
         LOG_WRN("Not sending request due to timeout");

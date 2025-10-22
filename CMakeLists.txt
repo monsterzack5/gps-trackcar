@@ -29,8 +29,10 @@ target_sources(app PRIVATE
     src/gps/assistance.c
     
     src/networking/network_info.cpp
-    src/networking/networking.cpp
+    src/networking/connectivity.cpp
     src/networking/dns.cpp
+    src/networking/network_requests.cpp
+    src/networking/tls.cpp
 
     src/sensors/battery.cpp
 )
