@@ -13,6 +13,7 @@ zephyr_include_directories(${gen_dir})
 zephyr_include_directories(src/gps)
 zephyr_include_directories(src/networking)
 zephyr_include_directories(src/sensors)
+zephyr_include_directories(src/sync)
 
 generate_inc_file_for_target(
     app

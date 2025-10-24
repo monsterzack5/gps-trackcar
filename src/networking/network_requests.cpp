@@ -1,15 +1,14 @@
 #include "network_requests.h"
 
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/net/socket.h>
-#include <zephyr/posix/sys/socket.h>
-
 #include "battery.h"
 #include "connectivity.h"
 #include "dns.h"
 #include "network_info.h"
 #include "tls.h"
+
+#include <nrf_socket.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(network_requests, LOG_LEVEL_DBG);
 
@@ -17,13 +16,19 @@ LOG_MODULE_REGISTER(network_requests, LOG_LEVEL_DBG);
 //       if too many failed attempts, re-resolve DNS
 // TODO: Add a timer that checks if the network stack has been on too long
 // TODO: Add watchdog
-// TODO: Add a mutex that locks transmitting if we are currently trying to get a fix
 // TODO: Packet builder with dedicated stack space
 // TODO: Make packet queue generic
 // TODO: Session resumption
 
+// Forward Declarations
 static void handle_network_request(k_work* work);
 static int send_http_request(char* request_body, size_t request_length, char* receive_buffer, size_t receive_length);
+
+// Sync Antenna Usage
+k_poll_signal modem_is_free_signal;
+
+static k_poll_event modem_event = K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_SIGNAL, K_POLL_MODE_NOTIFY_ONLY, &modem_is_free_signal);
+static k_work_poll handle_message_queue;
 
 // TODO:
 // struct network_request {
@@ -46,8 +51,6 @@ K_THREAD_STACK_DEFINE(network_requests_workqueue_stack, (1024 * 10));
 K_MSGQ_DEFINE(network_requests_msgq, sizeof(struct gps_tracker_packet), 20, 1);
 static k_work_q network_requests_workqueue;
 
-K_WORK_DEFINE(handle_message_queue, handle_network_request);
-
 int network_requests_init()
 {
     struct k_work_queue_config cfg = {
@@ -56,6 +59,7 @@ int network_requests_init()
     };
 
     k_work_queue_init(&network_requests_workqueue);
+    k_work_poll_init(&handle_message_queue, handle_network_request);
     k_work_queue_start(&network_requests_workqueue, network_requests_workqueue_stack, K_THREAD_STACK_SIZEOF(network_requests_workqueue_stack), 10, &cfg);
 
     return 0;
@@ -78,8 +82,20 @@ int send_gps_update(const nrf_modem_gnss_pvt_data_frame& frame)
         LOG_WRN("Failed to add packet to network msgq, rc = %d", put_rc);
     }
 
-    k_work_submit_to_queue(&network_requests_workqueue, &handle_message_queue);
+    uint32_t is_signaled = 0;
 
+    k_poll_signal_check(&modem_is_free_signal, &is_signaled, NULL);
+
+    k_timeout_t timeout = K_NO_WAIT;
+
+    // If the modem is not free, wait for the event forever to submit the event.
+    // if it is free, use the K_NO_WAIT value above.
+
+    if (!is_signaled) {
+        timeout = K_FOREVER;
+    }
+
+    k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, timeout);
     return 0;
 }
 

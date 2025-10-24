@@ -7,6 +7,7 @@
 
 #include "assistance.h"
 #include "battery.h"
+#include "modem_antenna_signal.h"
 #include "network_info.h"
 #include "network_requests.h"
 
@@ -152,7 +153,17 @@ static void gnss_event_handler(int event)
         break;
     }
 
+    // TODO: I don't remember the events we get from scheduled downloads
+    // Make sure we're handling those properly with our poller.
+
     switch (event) {
+    case NRF_MODEM_GNSS_EVT_PERIODIC_WAKEUP:
+        k_poll_signal_reset(&modem_is_free_signal);
+        break;
+    case NRF_MODEM_GNSS_EVT_SLEEP_AFTER_FIX:
+        k_poll_signal_raise(&modem_is_free_signal, 0);
+        break;
+
     case NRF_MODEM_GNSS_EVT_PVT: {
         static uint32_t pvt_events_handled = 0;
 
