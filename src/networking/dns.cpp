@@ -62,12 +62,22 @@ static int actually_resolve(DnsQuery* query)
         query->info_ptr = nullptr;
     }
 
-    int err = getaddrinfo(query->name, query->port, &hints, &query->info_ptr);
+    bool did_resolve = false;
+    for (int attempts = 1; attempts <= 3; attempts += 1) {
+        int rc = getaddrinfo(query->name, query->port, &hints, &query->info_ptr);
 
-    if (err) {
-        LOG_ERR("getaddrinfo failed with rc = %d", err);
-        // we should not need to call freeaddrinfo here.
-        return err;
+        if (rc != 0) {
+            LOG_ERR("getaddrinfo failed with rc = %d, attempt %d", rc, attempts);
+            continue;
+            // TODO: If this returns a non-zero code, who is responsible for freeing the linked list?
+        }
+
+        did_resolve = true;
+        break;
+    }
+
+    if (!did_resolve) {
+        return -1;
     }
 
     if (IS_ENABLED(CONFIG_LOG)) {

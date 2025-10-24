@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(network_requests, LOG_LEVEL_DBG);
 // TODO: Add a mutex that locks transmitting if we are currently trying to get a fix
 // TODO: Packet builder with dedicated stack space
 // TODO: Make packet queue generic
+// TODO: Session resumption
 
 static void handle_network_request(k_work* work);
 static int send_http_request(char* request_body, size_t request_length, char* receive_buffer, size_t receive_length);
@@ -254,7 +255,7 @@ static int send_http_request(char* request_body, size_t request_length, char* re
     LOG_DBG("Received %d bytes\n", bytes);
 
     /* Print HTTP response */
-    LOG_DGB("Received response:\n%s\n", receive_buffer);
+    LOG_DBG("Received response:\n%s\n", receive_buffer);
     LOG_DBG("Finished, cleaning up\n");
 
     // TODO: Make this nicer
