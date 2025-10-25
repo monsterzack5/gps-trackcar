@@ -12,7 +12,7 @@
 #include "network_info.h"
 #include "tls.h"
 
-LOG_MODULE_REGISTER(networking, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(connectivity, LOG_LEVEL_DBG);
 
 K_SEM_DEFINE(network_connected, 0, 1);
 
@@ -40,6 +40,7 @@ static void l4_event_handler(struct net_mgmt_event_callback* cb, uint32_t event,
         printk("Disconnected from the network\n");
         break;
     default:
+        LOG_WRN("Unhandled network event: %u", event);
         break;
     }
 }
@@ -56,6 +57,7 @@ int set_networking_state(NetworkState state)
     static auto current_state = NetworkState::Deactivated;
 
     if (current_state == state) {
+        LOG_WRN("Requested modem state is the same as the current state!, state = %d", (int)state);
         return 0;
     }
 
@@ -69,9 +71,15 @@ int set_networking_state(NetworkState state)
         rc = conn_mgr_all_if_connect(true);
         if (rc != 0) {
             LOG_ERR("Failed to activate all network interfaces, rc = %d", rc);
+            return -1;
         }
+
+        LOG_INF("Started Cell connection, waiting for online event");
         // TODO: Error handle this.
-        k_sem_take(&network_connected, K_FOREVER);
+        rc = k_sem_take(&network_connected, K_SECONDS(90));
+        if (rc == -EAGAIN) {
+            LOG_ERR("Network did not come online, dead on timeout");
+        }
         break;
     case NetworkState::Disconnected:
         rc = conn_mgr_all_if_disconnect(true);

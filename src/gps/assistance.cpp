@@ -16,27 +16,28 @@
 #include <zephyr/sys_clock.h>
 
 #include "assistance.h"
+#include "connectivity.h"
 #include "factory_almanac_v3.h"
 #include "mcc_location_table.h"
 
 LOG_MODULE_REGISTER(almanac_helper, LOG_LEVEL_DBG);
 
+#define PLMN_STR_MAX_LEN 8 /* MCC + MNC + quotes */
+
 static char current_alm_checksum[64];
 
 static int set(const char* key, size_t len_rd, settings_read_cb read_cb, void* cb_arg)
 {
-    int len;
-    int key_len;
-    const char* next;
 
     if (!key) {
         return -ENOENT;
     }
 
-    key_len = settings_name_next(key, &next);
+    const char* next;
+    int key_len = settings_name_next(key, &next);
 
     if (!strncmp(key, "almanac_checksum", key_len)) {
-        len = read_cb(cb_arg, &current_alm_checksum, sizeof(current_alm_checksum));
+        size_t len = read_cb(cb_arg, &current_alm_checksum, sizeof(current_alm_checksum));
         if (len < sizeof(current_alm_checksum)) {
             LOG_ERR("Failed to read almanac checksum from settings");
         }
@@ -148,7 +149,6 @@ static void time_inject(void)
 
 static void location_inject(void)
 {
-    static const size_t PLMN_STR_MAX_LEN = 8; /* MCC + MNC + quotes */
 
     int err;
     char plmn_str[PLMN_STR_MAX_LEN + 1];
@@ -158,15 +158,18 @@ static void location_inject(void)
 
     /* Read PLMN string from modem to get the MCC. */
     err = nrf_modem_at_scanf(
-        "AT%%XMONITOR",
+        "AT%XMONITOR",
         "%%XMONITOR: "
         "%*d"                                    /* <reg_status>: ignored */
         ",%*[^,]"                                /* <full_name>: ignored */
         ",%*[^,]"                                /* <short_name>: ignored */
         ",%" STRINGIFY(PLMN_STR_MAX_LEN) "[^,]", /* <plmn> */
         plmn_str);
+
+    LOG_WRN("Read PLMN STR: %s", plmn_str);
+
     if (err != 1) {
-        LOG_WRN("Couldn't read PLMN from modem, location assistance unavailable");
+        LOG_WRN("Couldn't read PLMN from modem, location assistance unavailable, err = %d", err);
         return;
     }
 
@@ -186,25 +189,7 @@ static void location_inject(void)
     location.unc_semiminor = mcc_info->unc_semiminor;
     location.orientation_major = mcc_info->orientation;
     location.confidence = mcc_info->confidence;
-
-#if defined(CONFIG_GNSS_SAMPLE_LOW_ACCURACY)
-    if (CONFIG_GNSS_SAMPLE_ASSISTANCE_REFERENCE_ALT != -32767) {
-        /* Use reference altitude to enable 3-sat first fix. */
-        LOG_INF("Using reference altitude %d meters",
-            CONFIG_GNSS_SAMPLE_ASSISTANCE_REFERENCE_ALT);
-        location.altitude = CONFIG_GNSS_SAMPLE_ASSISTANCE_REFERENCE_ALT;
-        /* The altitude uncertainty has to be less than 100 meters (coded number K has to
-         * be less than 48) for the altitude to be used for a 3-sat fix. GNSS increases
-         * the uncertainty depending on the age of the altitude and whether the device is
-         * stationary or moving. The uncertainty is set to 0 (meaning 0 meters), so that
-         * it remains usable for a 3-sat fix for as long as possible.
-         */
-        location.unc_altitude = 0;
-    } else
-#endif
-    {
-        location.unc_altitude = 255; /* altitude not used */
-    }
+    location.unc_altitude = 255; /* altitude not used */
 
     err = nrf_modem_gnss_agnss_write(
         &location, sizeof(location), NRF_MODEM_GNSS_AGNSS_LOCATION);
@@ -267,12 +252,19 @@ int assistance_request(const struct nrf_modem_gnss_agnss_data_frame* agnss_reque
         return -1;
     }
 
-    if (agnss_request->system_count > 0) {
+    nrf_modem_gnss_stop();
+    // Some time to break down GPS
+    k_sleep(K_MSEC(100));
+
+    // Assistance requires cell connectivity for mcc location and network time injection
+    set_networking_state(NetworkState::Connected);
+
+    if (agnss_request->system_count == 0) {
         LOG_WRN("GNSS system data need not found!, system_count: %d", agnss_request->system_count);
         return 0;
     }
 
-    if (agnss_request->system[0].system_id == NRF_MODEM_GNSS_SYSTEM_GPS) {
+    if (agnss_request->system[0].system_id != NRF_MODEM_GNSS_SYSTEM_GPS) {
         LOG_WRN("GPS data need not found");
         return 0;
     }
@@ -303,11 +295,7 @@ int assistance_request(const struct nrf_modem_gnss_agnss_data_frame* agnss_reque
         location_inject();
     }
 
+    set_networking_state(NetworkState::Disconnected);
+    nrf_modem_gnss_start();
     return 0;
-}
-
-bool assistance_is_active(void)
-{
-    /* Always return false because assistance_request() doesn't take much time. */
-    return false;
 }

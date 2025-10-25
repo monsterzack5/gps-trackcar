@@ -267,7 +267,7 @@ static const struct mcc_table mcc_table[] = {
  */
 const struct mcc_table* mcc_lookup(uint16_t mcc)
 {
-    for (int i = 0; i < ARRAY_SIZE(mcc_table); i++) {
+    for (size_t i = 0; i < ARRAY_SIZE(mcc_table); i++) {
         if (mcc_table[i].mcc == mcc) {
             return &mcc_table[i];
         }

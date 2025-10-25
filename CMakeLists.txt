@@ -27,7 +27,7 @@ target_sources(app PRIVATE
     src/startup.c
 
     src/gps/gps.cpp
-    src/gps/assistance.c
+    src/gps/assistance.cpp
     
     src/networking/network_info.cpp
     src/networking/connectivity.cpp

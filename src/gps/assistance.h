@@ -33,14 +33,6 @@ int assistance_init();
  */
 int assistance_request(const struct nrf_modem_gnss_agnss_data_frame* agnss_request);
 
-/**
- * @brief Returns assistance module state.
- *
- * @retval true if assistance module is downloading data.
- * @retval false if assistance module is idle.
- */
-bool assistance_is_active(void);
-
 #ifdef __cplusplus
 }
 #endif

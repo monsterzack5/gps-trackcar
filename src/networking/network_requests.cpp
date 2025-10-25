@@ -19,6 +19,7 @@ LOG_MODULE_REGISTER(network_requests, LOG_LEVEL_DBG);
 // TODO: Packet builder with dedicated stack space
 // TODO: Make packet queue generic
 // TODO: Session resumption
+// TODO: Don't let GPS try to get a fix forever, timeout and wait after a while
 
 // Forward Declarations
 static void handle_network_request(k_work* work);
@@ -58,8 +59,11 @@ int network_requests_init()
         .no_yield = false
     };
 
+    LOG_INF("network requests init'ed");
+
     k_work_queue_init(&network_requests_workqueue);
     k_work_poll_init(&handle_message_queue, handle_network_request);
+    k_poll_signal_init(&modem_is_free_signal);
     k_work_queue_start(&network_requests_workqueue, network_requests_workqueue_stack, K_THREAD_STACK_SIZEOF(network_requests_workqueue_stack), 10, &cfg);
 
     return 0;
@@ -83,17 +87,20 @@ int send_gps_update(const nrf_modem_gnss_pvt_data_frame& frame)
     }
 
     uint32_t is_signaled = 0;
-
-    k_poll_signal_check(&modem_is_free_signal, &is_signaled, NULL);
-
-    k_timeout_t timeout = K_NO_WAIT;
+    int result = 0;
+    k_poll_signal_check(&modem_is_free_signal, &is_signaled, &result);
 
     // If the modem is not free, wait for the event forever to submit the event.
     // if it is free, use the K_NO_WAIT value above.
 
+    k_timeout_t timeout = K_NO_WAIT;
     if (!is_signaled) {
         timeout = K_FOREVER;
     }
+
+    // TODO: This needs to make very sure we are actually running the workqueue!
+    // if something fails and for some reason we don't reschedule it, that can cause
+    // problems.
 
     k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, timeout);
     return 0;

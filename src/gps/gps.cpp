@@ -13,6 +13,9 @@
 
 LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
 
+K_THREAD_STACK_DEFINE(gps_work_queue_stack, (1024 * 2));
+static k_work_q gps_work_queue;
+
 // For handling GPS fix events
 void pvt_data_handler_fn(k_work* work);
 struct pvt_work_struct {
@@ -30,35 +33,10 @@ static assistance_work_struct assistance_work;
 
 // ----
 
-// static void print_flags(const nrf_modem_gnss_pvt_data_frame& pvt_data)
-// {
-//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID) {
-//         printk(" NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID");
-//     }
-//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_LEAP_SECOND_VALID) {
-//         printk(" NRF_MODEM_GNSS_PVT_FLAG_LEAP_SECOND_VALID");
-//     }
-//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_SLEEP_BETWEEN_PVT) {
-//         printk(" NRF_MODEM_GNSS_PVT_FLAG_SLEEP_BETWEEN_PVT");
-//     }
-//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_DEADLINE_MISSED) {
-//         printk(" NRF_MODEM_GNSS_PVT_FLAG_DEADLINE_MISSED");
-//     }
-//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_NOT_ENOUGH_WINDOW_TIME) {
-//         printk(" NRF_MODEM_GNSS_PVT_FLAG_NOT_ENOUGH_WINDOW_TIME");
-//     }
-//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_VELOCITY_VALID) {
-//         printk(" NRF_MODEM_GNSS_PVT_FLAG_VELOCITY_VALID");
-//     }
-//     if (pvt_data.flags & NRF_MODEM_GNSS_PVT_FLAG_SCHED_DOWNLOAD) {
-//         printk(" NRF_MODEM_GNSS_PVT_FLAG_SCHED_DOWNLOAD");
-//     }
-//     printk("\n");
-// }
-
-static int64_t last_uptime_sent = 0;
 void pvt_data_handler_fn(k_work* work_item)
 {
+    static int64_t last_uptime_sent = 0;
+
     pvt_work_struct* data = CONTAINER_OF(work_item, struct pvt_work_struct, work);
 
     int64_t uptime = k_uptime_get();
@@ -160,6 +138,7 @@ static void gnss_event_handler(int event)
     case NRF_MODEM_GNSS_EVT_PERIODIC_WAKEUP:
         k_poll_signal_reset(&modem_is_free_signal);
         break;
+
     case NRF_MODEM_GNSS_EVT_SLEEP_AFTER_FIX:
         k_poll_signal_raise(&modem_is_free_signal, 0);
         break;
@@ -184,8 +163,7 @@ static void gnss_event_handler(int event)
 
         if (pvt_rc == 0 && (pvt_frame.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID)) {
             pvt_data_work.pvt_frame = pvt_frame;
-            LOG_DBG("Submitting frame to queue");
-            k_work_submit(&pvt_data_work.work);
+            k_work_submit_to_queue(&gps_work_queue, &pvt_data_work.work);
         }
 
         break;
@@ -195,7 +173,7 @@ static void gnss_event_handler(int event)
     case NRF_MODEM_GNSS_EVT_AGNSS_REQ: {
         int retval = nrf_modem_gnss_read(&assistance_work.agnss_frame, sizeof(assistance_work.agnss_frame), NRF_MODEM_GNSS_DATA_AGNSS_REQ);
         if (retval == 0) {
-            k_work_submit(&assistance_work.work);
+            k_work_submit_to_queue(&gps_work_queue, &assistance_work.work);
         }
         break;
     }
@@ -205,17 +183,35 @@ static void gnss_event_handler(int event)
     }
 }
 
-static void work_init()
+static void workqueue_init()
 {
+    struct k_work_queue_config cfg = {
+        .name = "gps_work_queue",
+        .no_yield = false
+    };
+
     k_work_init(&pvt_data_work.work, pvt_data_handler_fn);
     k_work_init(&assistance_work.work, assistance_handler_fn);
+    k_work_queue_init(&gps_work_queue);
+    k_work_queue_start(&gps_work_queue, gps_work_queue_stack, K_THREAD_STACK_SIZEOF(gps_work_queue_stack), 10, &cfg);
+}
+
+int gps_start()
+{
+    int rc = nrf_modem_gnss_start();
+    if (rc != 0) {
+        LOG_ERR("Failed to start GNSS, rc = %d", rc);
+        return -1;
+    }
+
+    return rc;
 }
 
 int gps_init()
 {
     int rc = 0;
 
-    work_init();
+    workqueue_init();
     assistance_init();
 
     // Enable GPS mode in the modem
@@ -262,15 +258,10 @@ int gps_init()
         return -1;
     }
 
-    if (nrf_modem_gnss_start() != 0) {
-        LOG_ERR("Failed to start GNSS");
-        return -1;
-    }
-
-    int prio_rc = nrf_modem_gnss_prio_mode_enable();
-
-    if (prio_rc != 0) {
-        LOG_ERR("Failed to set GPS Priority Mode");
+    int gps_rc = nrf_modem_gnss_start();
+    if (gps_rc != 0) {
+        LOG_ERR("Failed to start GPS!, rc = %d", gps_rc);
+        return gps_rc;
     }
 
     LOG_INF("GPS Initalized");
