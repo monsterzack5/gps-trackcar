@@ -4,6 +4,7 @@
 #include "connectivity.h"
 #include "dns.h"
 #include "network_info.h"
+#include "packet_builder.h"
 #include "tls.h"
 
 #include <nrf_socket.h>
@@ -31,17 +32,9 @@ k_poll_signal modem_is_free_signal;
 static k_poll_event modem_event = K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_SIGNAL, K_POLL_MODE_NOTIFY_ONLY, &modem_is_free_signal);
 static k_work_poll handle_message_queue;
 
-// TODO:
-// struct network_request {
-// char body[512];
-// };
-
-// This contains time sensitive data, imei does not change, so we
-// don't need to include it.
-struct gps_tracker_packet {
-    nrf_modem_gnss_pvt_data_frame frame;
-    ProviderInfo info;
-    uint8_t battery_soc;
+struct network_request {
+    // TODO: Add kconfig to keep this inline with the size of PacketBuilder's buffer
+    char body[CONFIG_NETWORK_PACKET_SIZE] = { 0 };
 };
 
 K_THREAD_STACK_DEFINE(network_requests_workqueue_stack, (1024 * 10));
@@ -49,7 +42,7 @@ K_THREAD_STACK_DEFINE(network_requests_workqueue_stack, (1024 * 10));
 // Maybe this should be more generic and hold a packet?
 // We want to queue all of our packets
 // work on that later.
-K_MSGQ_DEFINE(network_requests_msgq, sizeof(struct gps_tracker_packet), 20, 1);
+K_MSGQ_DEFINE(network_requests_msgq, sizeof(struct network_request), 20, 1);
 static k_work_q network_requests_workqueue;
 
 int network_requests_init()
@@ -71,14 +64,23 @@ int network_requests_init()
 
 int send_gps_update(const nrf_modem_gnss_pvt_data_frame& frame)
 {
-    gps_tracker_packet packet {};
+    auto info = get_provider_info();
+    auto bat_soc = get_battery_soc();
 
-    packet.frame = frame;
-    packet.info = get_provider_info();
-    packet.battery_soc = get_battery_soc();
+    PacketBuilder packet {};
 
-    LOG_INF("Submitted to the networking msgq");
-    int put_rc = k_msgq_put(&network_requests_msgq, &packet, K_NO_WAIT);
+    packet.build_gps_packet(frame, info, bat_soc);
+
+    size_t packet_len = 0;
+    char* raw_buffer = packet.get_raw_buffer(&packet_len);
+
+    network_request request {};
+
+    // TODO: Theres so much data being copied around, this is not right.
+    memcpy(request.body, raw_buffer, sizeof(request.body));
+
+    int put_rc = k_msgq_put(&network_requests_msgq, &raw_buffer, K_NO_WAIT);
+
     if (put_rc == -ENOMSG) {
         LOG_WRN("Network requests queue is full! Dropping Packet!");
         return -1;
@@ -90,17 +92,13 @@ int send_gps_update(const nrf_modem_gnss_pvt_data_frame& frame)
     int result = 0;
     k_poll_signal_check(&modem_is_free_signal, &is_signaled, &result);
 
-    // If the modem is not free, wait for the event forever to submit the event.
-    // if it is free, use the K_NO_WAIT value above.
-
+    // TODO: This needs to make very sure we are actually running the workqueue!
+    // if something fails and for some reason we don't reschedule it, that can cause
+    // problems.
     k_timeout_t timeout = K_NO_WAIT;
     if (!is_signaled) {
         timeout = K_FOREVER;
     }
-
-    // TODO: This needs to make very sure we are actually running the workqueue!
-    // if something fails and for some reason we don't reschedule it, that can cause
-    // problems.
 
     k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, timeout);
     return 0;
@@ -110,104 +108,43 @@ static void handle_network_request(k_work* work)
 {
     ARG_UNUSED(work);
 
-    // We should support different kinds of messages.
-    // For now, handle GPS
     LOG_DBG("Handling network packet");
-    gps_tracker_packet packet;
     // _peek because _get removes the packet, we only want to clear
     // the packet if we use it.
-    int rc = k_msgq_peek(&network_requests_msgq, &packet);
+    network_request request {};
+    size_t request_len = strnlen(request.body, sizeof(request.body));
+
+    int rc = k_msgq_peek(&network_requests_msgq, &request);
     if (rc < 0) {
         LOG_WRN("Handle network request called with nothing to process!");
         return;
     }
 
-    char request_buffer[1024] = { 0 };
-    char query_string[800] = { 0 };
-    char iso8601_time[60] = { 0 };
-    char receive_buffer[1024] = { 0 };
-    char network_info[256] = { 0 };
-    char charge[12] = { 0 };
+    char rec_buf[CONFIG_NETWORK_PACKET_SIZE] = { 0 };
 
-    // Build timestamp
-    snprintf(iso8601_time, sizeof(iso8601_time),
-        "%04u-%02u-%02uT%02u:%02u:%02uZ",
-        packet.frame.datetime.year,
-        packet.frame.datetime.month,
-        packet.frame.datetime.day,
-        packet.frame.datetime.hour,
-        packet.frame.datetime.minute,
-        packet.frame.datetime.seconds);
-
-    snprintf(network_info, sizeof(network_info), "%u,%u,%u,%u,%u",
-        packet.info.mcc,
-        packet.info.mnc,
-        packet.info.lac,
-        packet.info.cellid,
-        packet.info.signal_strength);
-
-    // TODO: Make actually work
-    // Build charge
-    snprintf(charge, sizeof(charge), "%s", "false");
-
-    // snprintf(query_string, sizeof(query_string), "/?id=%s&lat=%f&lon=%f&timestamp=%s", params.imei, params.frame.latitude, params.frame.longitude, iso8601_time);
-    float battery_level = get_battery_soc();
-    snprintf(query_string, sizeof(query_string),
-        "/?"
-        "id=%s"
-        "&lat=%f"
-        "&lon=%f"
-        "&accuracy=%.1f"
-        "&heading=%.1f"
-        "&altitude=%.2f"
-        "&timestamp=%s"
-        "&cell=%s"
-        "&batt=%.1f"
-        "&charge=%s"
-        "&temp=%.1f",
-        get_imei(),
-        packet.frame.latitude,
-        packet.frame.longitude,
-        (double)packet.frame.accuracy,
-        (double)packet.frame.heading,
-        (double)packet.frame.altitude,
-        iso8601_time,
-        network_info,
-        (double)battery_level,
-        charge,
-        (double)packet.info.temperature);
-
-    // Build Request
-    snprintf(request_buffer, sizeof(request_buffer),
-        "GET %s HTTP/1.1\r\n"
-        "Host: %s:%s\r\n"
-        "Connection: close\r\n"
-        "User-Agent: curl/8.14.1\r\n" // todo: new user-agent?
-        "Accept: */*\r\n"
-        "\r\n",
-        query_string, CONFIG_TRACCAR_HOSTNAME, CONFIG_TRACCAR_PORT);
-
-    size_t request_length = strnlen(request_buffer, sizeof(request_buffer));
-    size_t query_len = strnlen(query_string, sizeof(query_string));
-    size_t iso_len = strnlen(iso8601_time, sizeof(iso8601_time));
-    size_t network_info_len = strnlen(network_info, sizeof(network_info));
-    LOG_INF("Request len: %u, Query Len: %u, iso len: %u network info: %u\n", request_length, query_len, iso_len, network_info_len);
-
-    int send_rc = send_http_request(request_buffer, request_length, receive_buffer, sizeof(receive_buffer));
+    int send_rc = send_http_request(request.body, request_len, rec_buf, sizeof(rec_buf));
     if (send_rc == 0) {
-        (void)k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
+        (void)k_msgq_get(&network_requests_msgq, &request, K_NO_WAIT);
     }
-    // size_t printed = 0;
-    // size_t how_many_to_print = 30;
-    // // LOG_DBG("%.*s", length_to_print, rx_buffer);
-    // do {
-    //     LOG_DBG("%.*s", how_many_to_print, &request_buffer[printed]);
-    //     printed += 30;
-    //     if (request_length < how_many_to_print) {
-    //         how_many_to_print = request_length;
-    //     }
-    // } while (printed < request_length);
+
+    if (k_msgq_num_used_get(&network_requests_msgq) > 0) {
+        LOG_INF("Message queue not empty, scheduling another run");
+        k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, K_FOREVER);
+    }
+
+    size_t printed = 0;
+    size_t how_many_to_print = 30;
+
+    do {
+        printk("%.*s", how_many_to_print, &request.body[printed]);
+        printed += 30;
+        if (request_len < how_many_to_print) {
+            how_many_to_print = request_len;
+        }
+    } while (printed < request_len);
 }
+
+#include "print_bin.h"
 
 static int send_http_request(char* request_body, size_t request_length, char* receive_buffer, size_t receive_length)
 {
@@ -220,7 +157,6 @@ static int send_http_request(char* request_body, size_t request_length, char* re
 
     if (res == nullptr) {
         // Failed to resolve, fail now.
-        set_networking_state(NetworkState::Disconnected);
         return -1;
     }
 
@@ -235,7 +171,7 @@ static int send_http_request(char* request_body, size_t request_length, char* re
     fd = socket(res->ai_family, SOCK_STREAM, IPPROTO_TLS_1_2);
 
     if (fd == -1) {
-        LOG_DBG("Failed to open socket!\n");
+        LOG_ERR("Failed to open socket!\n");
         cleanup();
         return -1;
     }
@@ -251,16 +187,19 @@ static int send_http_request(char* request_body, size_t request_length, char* re
         ntohs(((struct sockaddr_in*)(res->ai_addr))->sin_port));
     err = connect(fd, res->ai_addr, res->ai_addrlen);
     if (err) {
-        LOG_DBG("connect() failed, err: %d\n", errno);
+        LOG_ERR("connect() failed, err: %d\n", errno);
         cleanup();
         return -1;
     }
 
     // TODO: Add back chunking.
     // Make our request
+    printk("Request length: %u\n", request_length);
+    print_u8_array((uint8_t*)request_body, 512);
     int bytes = send(fd, request_body, request_length, 0);
     if (bytes < 0) {
-        LOG_DBG("send() failed, err %d\n", errno);
+        LOG_ERR("send() failed, err %d\n", errno);
+        LOG_ERR("Error string: %s\n", strerror(errno));
         cleanup();
         return -1;
     }
@@ -279,13 +218,6 @@ static int send_http_request(char* request_body, size_t request_length, char* re
 
     /* Print HTTP response */
     LOG_DBG("Received response:\n%s\n", receive_buffer);
-    LOG_DBG("Finished, cleaning up\n");
-
-    // TODO: Make this nicer
-    // Time for TCP teardown
-    k_sleep(K_MSEC(200));
-    set_networking_state(NetworkState::Disconnected);
-
     cleanup();
 
     return 0;

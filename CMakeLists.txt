@@ -14,6 +14,7 @@ zephyr_include_directories(src/gps)
 zephyr_include_directories(src/networking)
 zephyr_include_directories(src/sensors)
 zephyr_include_directories(src/sync)
+zephyr_include_directories(src/util)
 
 generate_inc_file_for_target(
     app
@@ -34,6 +35,7 @@ target_sources(app PRIVATE
     src/networking/dns.cpp
     src/networking/network_requests.cpp
     src/networking/tls.cpp
+    src/networking/packet_builder.cpp
 
     src/sensors/battery.cpp
 )

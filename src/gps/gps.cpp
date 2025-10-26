@@ -13,7 +13,7 @@
 
 LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
 
-K_THREAD_STACK_DEFINE(gps_work_queue_stack, (1024 * 2));
+K_THREAD_STACK_DEFINE(gps_work_queue_stack, (1024 * 3));
 static k_work_q gps_work_queue;
 
 // For handling GPS fix events

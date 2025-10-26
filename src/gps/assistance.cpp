@@ -166,8 +166,6 @@ static void location_inject(void)
         ",%" STRINGIFY(PLMN_STR_MAX_LEN) "[^,]", /* <plmn> */
         plmn_str);
 
-    LOG_WRN("Read PLMN STR: %s", plmn_str);
-
     if (err != 1) {
         LOG_WRN("Couldn't read PLMN from modem, location assistance unavailable, err = %d", err);
         return;
@@ -247,6 +245,7 @@ int assistance_init()
 
 int assistance_request(const struct nrf_modem_gnss_agnss_data_frame* agnss_request)
 {
+    return 0;
     // Check your pointers Nordic!
     if (agnss_request == NULL) {
         return -1;

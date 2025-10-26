@@ -26,6 +26,12 @@ config DNS_CACHE_ENTRIES
     help
         amount of URL's DNS queries to cache
 
+config NETWORK_PACKET_SIZE
+    int "Packet Size"
+    range 512 4096
+    default 512
+    help
+        size of a network packet that will be queued
 endmenu
 
 menu "Zephyr Kernel"

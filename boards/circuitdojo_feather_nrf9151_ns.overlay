@@ -1,13 +1,49 @@
 &i2c2 {
-	npm1300_pmic: pmic@6b {
-		compatible = "nordic,npm1300";
-		reg = <0x6b>;
+    npm1300_pmic: pmic@6b {
+        compatible = "nordic,npm1300";
+        reg = <0x6b>;
 
-		npm1300_leds: leds {
-			compatible = "nordic,npm1300-led";
-			nordic,led0-mode = "host";
-			nordic,led1-mode = "host";
-			nordic,led2-mode = "host";
-		};
-	};
+        npm1300_leds: leds {
+            compatible = "nordic,npm1300-led";
+            nordic,led0-mode = "host";
+            nordic,led1-mode = "host";
+            nordic,led2-mode = "host";
+        };
+    };
+};
+
+&pinctrl {
+    spi2_default: spi2_default {
+        group1 {
+            psels = <NRF_PSEL(SPIM_SCK, 0, 27)>,
+                    <NRF_PSEL(SPIM_MOSI, 0, 28)>,
+                    <NRF_PSEL(SPIM_MISO, 0, 26)>;
+        };
+    };
+
+    spi2_sleep: spi2_sleep {
+        group1 {
+            psels = <NRF_PSEL(SPIM_SCK, 0, 27)>,
+                    <NRF_PSEL(SPIM_MOSI, 0, 28)>,
+                    <NRF_PSEL(SPIM_MISO, 0, 26)>;
+            low-power-enable;
+        };
+    };
+};
+
+&spi1 {
+    compatible = "nordic,nrf-spim";
+    status = "okay";
+    pinctrl-0 = <&spi2_default>;
+    pinctrl-1 = <&spi2_sleep>;
+    pinctrl-names = "default", "sleep";
+    cs-gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;
+
+    sdhc0: sdhc@0 {
+        compatible = "zephyr,mmc-spi-slot";
+        reg = <0>;
+        status = "okay";
+        label = "SDHC0";
+        spi-max-frequency = <24000000>;
+    };
 };
