@@ -2,7 +2,6 @@
 
 cmake_minimum_required(VERSION 3.21)
 
-
 find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 project(gps-tracker-test)
 
@@ -15,6 +14,7 @@ zephyr_include_directories(src/networking)
 zephyr_include_directories(src/sensors)
 zephyr_include_directories(src/sync)
 zephyr_include_directories(src/util)
+zephyr_include_directories(src/sdcard)
 
 generate_inc_file_for_target(
     app
@@ -38,6 +38,8 @@ target_sources(app PRIVATE
     src/networking/packet_builder.cpp
 
     src/sensors/battery.cpp
+
+    src/sdcard/sdcard.cpp
 )
 
 
