@@ -194,7 +194,7 @@ static int send_http_request(char* request_body, size_t request_length, char* re
 
     // TODO: Add back chunking.
     // Make our request
-    printk("Request length: %u\n", request_length);
+    LOG_DBG("Request length: %u\n", request_length);
     print_u8_array((uint8_t*)request_body, 512);
     int bytes = send(fd, request_body, request_length, 0);
     if (bytes < 0) {

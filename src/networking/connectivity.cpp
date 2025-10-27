@@ -22,7 +22,7 @@ static void connectivity_event_handler(struct net_mgmt_event_callback* cb, uint3
 {
     // TODO: Handle ALL Events!
     if (event == NET_EVENT_CONN_IF_FATAL_ERROR) {
-        printk("Fatal error received from the connectivity layer\n");
+        LOG_ERR("Fatal error received from the connectivity layer\n");
         return;
     }
 }
@@ -33,11 +33,11 @@ static void l4_event_handler(struct net_mgmt_event_callback* cb, uint32_t event,
     // TODO: Handle ALL events!
     switch (event) {
     case NET_EVENT_L4_CONNECTED:
-        printk("Network connectivity established and IP address assigned\n");
+        LOG_INF("Network connectivity established and IP address assigned\n");
         k_sem_give(&network_connected);
         break;
     case NET_EVENT_L4_DISCONNECTED:
-        printk("Disconnected from the network\n");
+        LOG_INF("Disconnected from the network\n");
         break;
     default:
         LOG_WRN("Unhandled network event: %u", event);

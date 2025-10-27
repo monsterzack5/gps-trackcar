@@ -37,7 +37,7 @@ int cert_provision(void)
 
     int err = modem_key_mgmt_exists(TLS_SEC_TAG, MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, &exists);
     if (err) {
-        printk("Failed to check for certificates err %d\n", err);
+        LOG_ERR("Failed to check for certificates err %d\n", err);
         return err;
     }
 
@@ -45,25 +45,25 @@ int cert_provision(void)
         mismatch = modem_key_mgmt_cmp(TLS_SEC_TAG, MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, cert,
             sizeof(cert));
         if (!mismatch) {
-            printk("Certificate match\n");
+            LOG_INF("Certificate match\n");
             return 0;
         }
 
-        printk("Certificate mismatch\n");
+        LOG_WRN("Certificate mismatch\n");
         err = modem_key_mgmt_delete(TLS_SEC_TAG, MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN);
         if (err) {
-            printk("Failed to delete existing certificate, err %d\n", err);
+            LOG_ERR("Failed to delete existing certificate, err %d\n", err);
         }
     }
 
-    printk("Provisioning certificate to the modem\n");
+    LOG_DBG("Provisioning certificate to the modem\n");
 
     /*  Provision certificate to the modem */
     // This takes a while
     err = modem_key_mgmt_write(TLS_SEC_TAG, MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, cert,
         sizeof(cert));
     if (err) {
-        printk("Failed to provision certificate, err %d\n", err);
+        LOG_ERR("Failed to provision certificate, err %d\n", err);
         return err;
     }
 
@@ -89,7 +89,7 @@ int tls_setup(int fd)
 
     int err = setsockopt(fd, SOL_TLS, TLS_PEER_VERIFY, &verify, sizeof(verify));
     if (err) {
-        printk("Failed to setup peer verification, err %d\n", errno);
+        LOG_ERR("Failed to setup peer verification, err %d\n", errno);
         return err;
     }
 
@@ -98,14 +98,14 @@ int tls_setup(int fd)
      */
     err = setsockopt(fd, SOL_TLS, TLS_SEC_TAG_LIST, tls_sec_tag, sizeof(tls_sec_tag));
     if (err) {
-        printk("Failed to setup TLS sec tag, err %d\n", errno);
+        LOG_ERR("Failed to setup TLS sec tag, err %d\n", errno);
         return err;
     }
 
     err = setsockopt(fd, SOL_TLS, TLS_HOSTNAME, CONFIG_TRACCAR_HOSTNAME,
         sizeof(CONFIG_TRACCAR_HOSTNAME) - 1);
     if (err) {
-        printk("Failed to setup TLS hostname, err %d\n", errno);
+        LOG_ERR("Failed to setup TLS hostname, err %d\n", errno);
         return err;
     }
 
