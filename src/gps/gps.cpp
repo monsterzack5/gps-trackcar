@@ -13,6 +13,23 @@
 
 LOG_MODULE_REGISTER(gps, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
+// ---
+// NOTE: GPS Timeout and Restart
+// - On NRF_MODEM_GNSS_EVT_PERIODIC_WAKEUP
+//     - Start a timer for GPS_TIMEOUT
+//     - If the timer expires, stop GPS for GPS_RESTART_DELAY
+// - Reset timer if/when NRF_MODEM_GNSS_EVT_SLEEP_AFTER_FIX
+
+static const k_timeout_t GPS_TIMEOUT = K_MINUTES(1);
+static const k_timeout_t GPS_RESTART_DELAY = K_MINUTES(3);
+
+void handle_gps_timeout(k_timer* timer);
+void restart_gps_work_fn(k_work* work);
+K_TIMER_DEFINE(gps_timeout_timer, handle_gps_timeout, NULL);
+K_WORK_DELAYABLE_DEFINE(restart_gps_work, restart_gps_work_fn);
+
+// ---
+
 K_THREAD_STACK_DEFINE(gps_work_queue_stack, (1024 * 3));
 static k_work_q gps_work_queue;
 
@@ -58,6 +75,22 @@ void assistance_handler_fn(k_work* work_item)
     }
 }
 
+void handle_gps_timeout(k_timer* timer)
+{
+    LOG_WRN("GPS Timed out!");
+    // Let's stop for 5 minutes, and then try again.
+    nrf_modem_gnss_stop();
+
+    k_work_schedule_for_queue(&gps_work_queue, &restart_gps_work, GPS_RESTART_DELAY);
+}
+
+void restart_gps_work_fn(k_work* work)
+{
+    ARG_UNUSED(work);
+    LOG_INF("Starting GPS again");
+    nrf_modem_gnss_start();
+}
+
 static void check_for_modem_pvt_errors(const nrf_modem_gnss_pvt_data_frame& frame)
 {
     if (frame.flags & NRF_MODEM_GNSS_PVT_FLAG_DEADLINE_MISSED) {
@@ -91,13 +124,11 @@ static void print_satellite_stats(const nrf_modem_gnss_pvt_data_frame& pvt_data)
         }
     }
 
-    printf("Tracking: %2d Using: %2d Unhealthy: %d\n", tracked, in_fix, unhealthy);
+    LOG_DBG("Tracking: %2d Using: %2d Unhealthy: %d\n", tracked, in_fix, unhealthy);
 }
 
-static void gnss_event_handler(int event)
+static void print_gnss_event(int event)
 {
-
-    // TODO: Move to print func
     switch (event) {
     case NRF_MODEM_GNSS_EVT_PVT:
         // LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_PVT");
@@ -130,17 +161,23 @@ static void gnss_event_handler(int event)
         LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_REF_ALT_EXPIRED");
         break;
     }
+}
+
+static void gnss_event_handler(int event)
+{
+    print_gnss_event(event)
 
     // TODO: I don't remember the events we get from scheduled downloads
     // Make sure we're handling those properly with our poller.
-
     switch (event) {
     case NRF_MODEM_GNSS_EVT_PERIODIC_WAKEUP:
         k_poll_signal_reset(&modem_is_free_signal);
+        k_timer_start(&gps_timeout_timer, GPS_TIMEOUT, K_NO_WAIT);
         break;
 
     case NRF_MODEM_GNSS_EVT_SLEEP_AFTER_FIX:
         k_poll_signal_raise(&modem_is_free_signal, 0);
+        k_timer_stop(&gps_timeout_timer);
         break;
 
     case NRF_MODEM_GNSS_EVT_PVT: {
