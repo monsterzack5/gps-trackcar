@@ -106,15 +106,15 @@ static void handle_network_request(k_work* work)
 
     size_t request_len = strnlen(packet.get_raw_buffer(NULL), CONFIG_NETWORK_PACKET_SIZE);
 
-    printk("Body pulled:\n");
-    print_u8_array((uint8_t*)packet.get_raw_buffer(NULL), 200);
+    LOG_INF("Body pulled, len = %u:\n", request_len);
+    print_u8_array((uint8_t*)packet.get_raw_buffer(NULL), request_len);
 
     char rec_buf[CONFIG_NETWORK_PACKET_SIZE] = { 0 };
 
-    // int send_rc = send_http_request(request.body, request_len, rec_buf, sizeof(rec_buf));
-    // if (send_rc == 0) {
-    (void)k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
-    // }
+    int send_rc = send_http_request(packet.get_raw_buffer(NULL), request_len, rec_buf, sizeof(rec_buf));
+    if (send_rc == 0) {
+        (void)k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
+    }
 
     if (k_msgq_num_used_get(&network_requests_msgq) > 0) {
         LOG_INF("Message queue not empty, scheduling another run");

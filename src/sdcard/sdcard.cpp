@@ -15,38 +15,39 @@ LOG_MODULE_REGISTER(sdcard, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 static FATFS fat_fs;
 static struct fs_mount_t sd_mount {};
 
-int sdcard_set_log_filtering()
-{
-    // NOTE: Backend names found via testing:
-    // log_backend_fs
-    // log_backend_uart
+// TODO: Does not work.
+// int sdcard_set_log_filtering()
+// {
+//     // NOTE: Backend names found via testing:
+//     // log_backend_fs
+//     // log_backend_uart
 
-    const struct log_backend* fs_backend = NULL;
-    const char correct_name[] = "log_backend_fs";
+//     const struct log_backend* fs_backend = NULL;
+//     const char correct_name[] = "log_backend_fs";
 
-    // Find the backends by iterating through all registered backends
-    for (int i = 0; i < log_backend_count_get(); i++) {
-        const struct log_backend* backend = log_backend_get(i);
-        // const char* name = log_backend_name_get(backend);
+//     // Find the backends by iterating through all registered backends
+//     for (int i = 0; i < log_backend_count_get(); i++) {
+//         const struct log_backend* backend = log_backend_get(i);
+//         // const char* name = log_backend_name_get(backend);
 
-        LOG_INF("Found Backend: %s", backend->name);
+//         LOG_INF("Found Backend: %s", backend->name);
 
-        if (strncmp(backend->name, correct_name, sizeof(correct_name)) == 0) {
-            fs_backend = backend;
-            break;
-        }
-    }
+//         if (strncmp(backend->name, correct_name, sizeof(correct_name)) == 0) {
+//             fs_backend = backend;
+//             break;
+//         }
+//     }
 
-    // Set filesystem backend to INF level for all modules
-    if (fs_backend) {
-        uint32_t rc = log_filter_set(fs_backend,
-            0,  // Domain ID, This is a single domain project, so 0 is the default
-            -1, // Module ID, this file is called 'sdcard', -1 for all modules
-            LOG_LEVEL_INF);
-        LOG_DBG("FS backend set to INF, rc = %u\n", rc);
-    }
-    return 0;
-}
+//     // Set filesystem backend to INF level for all modules
+//     if (fs_backend) {
+//         uint32_t rc = log_filter_set(fs_backend,
+//             0,  // Domain ID, This is a single domain project, so 0 is the default
+//             -1, // Module ID, this file is called 'sdcard', -1 for all modules
+//             LOG_LEVEL_INF);
+//         LOG_DBG("FS backend set to INF, rc = %u\n", rc);
+//     }
+//     return 0;
+// }
 
 int sdcard_init()
 {
@@ -97,12 +98,14 @@ int sdcard_init()
 
     if (mkdir_rc != 0 && mkdir_rc != -EEXIST) {
         LOG_ERR("Failed to make logs directory. rc = %d", mkdir_rc);
+        return mkdir_rc;
     }
 
     // Short delay to let FS backend initialize
     k_sleep(K_MSEC(100));
 
-    sdcard_set_log_filtering();
+    // sdcard_set_log_filtering();
+    LOG_INF("SD Card enabled and initalized properly");
 
     return 0;
 }
