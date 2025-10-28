@@ -1,7 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(main, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
 #include "battery.h"
 #include "connectivity.h"

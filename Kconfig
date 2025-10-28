@@ -32,6 +32,30 @@ config NETWORK_PACKET_SIZE
     default 512
     help
         size of a network packet that will be queued
+# TODO Select and Unselect things with this
+config TRACCAR_ENABLE_SD_CARD
+    bool "Enable"
+    default false
+    select DISK_ACCESS
+    select DISK_DRIVERS
+    select DISK_DRIVER_SDMMC
+    select FILE_SYSTEM
+    select FAT_FILESYSTEM_ELM
+    select FILE_SYSTEM_MKFS
+    select FS_FATFS_EXFAT
+    depends on !NRF_MODEM_LIB_TRACE
+    
+    help
+      "Enable or disable logging to an SDCard"
+
+
+config TRACCAR_DEFAULT_LOG_LEVEL
+    int "Level"
+    range 0 4
+    default 3
+    help
+        default log level for project
+
 endmenu
 
 menu "Zephyr Kernel"

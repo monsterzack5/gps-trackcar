@@ -2,7 +2,7 @@
 
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(dns, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(dns, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
 const size_t URL_MAX_SIZE = 32;
 const size_t PORT_MAX_SIZE = 8;

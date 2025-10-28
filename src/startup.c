@@ -29,7 +29,7 @@ static void on_modem_lib_init(int ret, void* ctx)
         return;
     }
 
-    printk("*** Setting configuration: %s ***\n", AUXANTCFG_ENABLE);
+    LOG_INF("*** Setting configuration: %s ***\n", AUXANTCFG_ENABLE);
     k_sleep(K_MSEC(1000));
     int err = nrf_modem_at_printf("%s", AUXANTCFG_ENABLE);
     if (err) {

@@ -66,3 +66,7 @@
 &npm1300_buck1 {
     regulator-min-microvolt = <3300000>;
 };
+
+&npm1300_charger {
+    term-microvolt = <4200000>;
+};

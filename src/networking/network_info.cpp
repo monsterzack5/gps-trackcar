@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(network_info, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(network_info, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
 static char imei[16] = { 0 };
 
@@ -35,9 +35,9 @@ const char* get_imei()
     int rc = modem_info_string_get(MODEM_INFO_IMEI, imei, sizeof(imei));
     if (rc < 0) {
         LOG_ERR("modem_info_string_get failed, rc = %d", rc);
+        did_already_run = true;
     }
 
-    did_already_run = true;
     return imei;
 }
 
@@ -63,7 +63,7 @@ static float get_modem_str_and_convert_float(char* buffer, size_t buffer_size, m
     }
 
     char* end_ptr = NULL;
-    int converted = strtod(buffer, &end_ptr);
+    float converted = strtod(buffer, &end_ptr);
     return converted;
 }
 

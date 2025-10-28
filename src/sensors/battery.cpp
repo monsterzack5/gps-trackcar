@@ -4,7 +4,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(battery, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(battery, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
 const struct device* pmic = DEVICE_DT_GET(DT_NODELABEL(npm1300_charger));
 

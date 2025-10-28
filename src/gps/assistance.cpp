@@ -20,7 +20,7 @@
 #include "factory_almanac_v3.h"
 #include "mcc_location_table.h"
 
-LOG_MODULE_REGISTER(almanac_helper, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(almanac_helper, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
 #define PLMN_STR_MAX_LEN 8 /* MCC + MNC + quotes */
 

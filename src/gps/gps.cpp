@@ -11,7 +11,7 @@
 #include "network_info.h"
 #include "network_requests.h"
 
-LOG_MODULE_REGISTER(gps, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(gps, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
 K_THREAD_STACK_DEFINE(gps_work_queue_stack, (1024 * 3));
 static k_work_q gps_work_queue;

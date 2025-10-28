@@ -3,6 +3,7 @@
 #include "battery.h"
 #include "connectivity.h"
 #include "dns.h"
+#include "net_req.h"
 #include "network_info.h"
 #include "packet_builder.h"
 #include "tls.h"
@@ -11,7 +12,9 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(network_requests, LOG_LEVEL_DBG);
+#include "print_bin.h"
+
+LOG_MODULE_REGISTER(network_requests, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
 // TODO: Extra info struct that counts failed attempts
 //       if too many failed attempts, re-resolve DNS
@@ -32,17 +35,12 @@ k_poll_signal modem_is_free_signal;
 static k_poll_event modem_event = K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_SIGNAL, K_POLL_MODE_NOTIFY_ONLY, &modem_is_free_signal);
 static k_work_poll handle_message_queue;
 
-struct network_request {
-    // TODO: Add kconfig to keep this inline with the size of PacketBuilder's buffer
-    char body[CONFIG_NETWORK_PACKET_SIZE] = { 0 };
-};
-
 K_THREAD_STACK_DEFINE(network_requests_workqueue_stack, (1024 * 10));
 // TODO:
 // Maybe this should be more generic and hold a packet?
 // We want to queue all of our packets
 // work on that later.
-K_MSGQ_DEFINE(network_requests_msgq, sizeof(struct network_request), 20, 1);
+K_MSGQ_DEFINE(network_requests_msgq, sizeof(struct PacketBuilder), 20, 1);
 static k_work_q network_requests_workqueue;
 
 int network_requests_init()
@@ -71,15 +69,7 @@ int send_gps_update(const nrf_modem_gnss_pvt_data_frame& frame)
 
     packet.build_gps_packet(frame, info, bat_soc);
 
-    size_t packet_len = 0;
-    char* raw_buffer = packet.get_raw_buffer(&packet_len);
-
-    network_request request {};
-
-    // TODO: Theres so much data being copied around, this is not right.
-    memcpy(request.body, raw_buffer, sizeof(request.body));
-
-    int put_rc = k_msgq_put(&network_requests_msgq, &raw_buffer, K_NO_WAIT);
+    int put_rc = k_msgq_put(&network_requests_msgq, &packet, K_NO_WAIT);
 
     if (put_rc == -ENOMSG) {
         LOG_WRN("Network requests queue is full! Dropping Packet!");
@@ -95,12 +85,8 @@ int send_gps_update(const nrf_modem_gnss_pvt_data_frame& frame)
     // TODO: This needs to make very sure we are actually running the workqueue!
     // if something fails and for some reason we don't reschedule it, that can cause
     // problems.
-    k_timeout_t timeout = K_NO_WAIT;
-    if (!is_signaled) {
-        timeout = K_FOREVER;
-    }
 
-    k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, timeout);
+    k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, K_FOREVER);
     return 0;
 }
 
@@ -111,37 +97,40 @@ static void handle_network_request(k_work* work)
     LOG_DBG("Handling network packet");
     // _peek because _get removes the packet, we only want to clear
     // the packet if we use it.
-    network_request request {};
-    size_t request_len = strnlen(request.body, sizeof(request.body));
-
-    int rc = k_msgq_peek(&network_requests_msgq, &request);
+    PacketBuilder packet {};
+    int rc = k_msgq_peek(&network_requests_msgq, &packet);
     if (rc < 0) {
         LOG_WRN("Handle network request called with nothing to process!");
         return;
     }
 
+    size_t request_len = strnlen(packet.get_raw_buffer(NULL), CONFIG_NETWORK_PACKET_SIZE);
+
+    printk("Body pulled:\n");
+    print_u8_array((uint8_t*)packet.get_raw_buffer(NULL), 200);
+
     char rec_buf[CONFIG_NETWORK_PACKET_SIZE] = { 0 };
 
-    int send_rc = send_http_request(request.body, request_len, rec_buf, sizeof(rec_buf));
-    if (send_rc == 0) {
-        (void)k_msgq_get(&network_requests_msgq, &request, K_NO_WAIT);
-    }
+    // int send_rc = send_http_request(request.body, request_len, rec_buf, sizeof(rec_buf));
+    // if (send_rc == 0) {
+    (void)k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
+    // }
 
     if (k_msgq_num_used_get(&network_requests_msgq) > 0) {
         LOG_INF("Message queue not empty, scheduling another run");
         k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, K_FOREVER);
     }
 
-    size_t printed = 0;
-    size_t how_many_to_print = 30;
+    // size_t printed = 0;
+    // size_t how_many_to_print = 30;
 
-    do {
-        printk("%.*s", how_many_to_print, &request.body[printed]);
-        printed += 30;
-        if (request_len < how_many_to_print) {
-            how_many_to_print = request_len;
-        }
-    } while (printed < request_len);
+    // do {
+    //     printk("%.*s", how_many_to_print, &request.body[printed]);
+    //     printed += 30;
+    //     if (request_len < how_many_to_print) {
+    //         how_many_to_print = request_len;
+    //     }
+    // } while (printed < request_len);
 }
 
 #include "print_bin.h"

@@ -24,6 +24,7 @@ int PacketBuilder::build_gps_packet(const nrf_modem_gnss_pvt_data_frame& gps_fra
     append_accept_line();
     append_newline();
     append_null_terminator();
+    m_finished = true;
 
     return 0;
 }

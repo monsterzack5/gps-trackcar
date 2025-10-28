@@ -5,10 +5,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "net_req.h"
 #include "network_info.h"
+
 class PacketBuilder {
 public:
     const size_t buf_size = sizeof(buffer);
+    bool m_finished = false;
 
     int build_gps_packet(const nrf_modem_gnss_pvt_data_frame& gps_frame, const ProviderInfo& info, uint8_t battery_soc);
 
@@ -127,12 +130,6 @@ public:
 
         return buffer;
     }
-
-    // void print()
-    // {
-    //     fmt::println("Current Packet:\n|{}|", buffer);
-    //     print_u8_array((uint8_t*)buffer, 20);
-    // }
 
 private:
     char buffer[CONFIG_NETWORK_PACKET_SIZE] = { 0 };

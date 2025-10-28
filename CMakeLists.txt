@@ -22,7 +22,6 @@ generate_inc_file_for_target(
     ${gen_dir}/root_cert.pem.inc
 )
 
-
 target_sources(app PRIVATE
     src/main.cpp
     src/startup.c
@@ -41,6 +40,3 @@ target_sources(app PRIVATE
 
     src/sdcard/sdcard.cpp
 )
-
-
-
