@@ -163,6 +163,35 @@ static void print_gnss_event(int event)
     }
 }
 
+static void handle_pvt_event()
+{
+    static uint32_t pvt_events_handled = 0;
+    pvt_events_handled += 1;
+
+    if (!k_work_delayable_is_pending(&gps_timed_out_work)) {
+        LOG_WRN("Timeout work not running while getting PVT events, starting");
+        k_work_schedule_for_queue(&gps_work_queue, &gps_timed_out_work, GPS_TIMEOUT);
+    }
+
+    if (pvt_events_handled % 100 == 0) {
+        LOG_DBG("Handled %u PVT events, so far", pvt_events_handled);
+    }
+
+    nrf_modem_gnss_pvt_data_frame pvt_frame;
+
+    int pvt_rc = nrf_modem_gnss_read(&pvt_frame, sizeof(pvt_frame), NRF_MODEM_GNSS_EVT_PVT);
+
+    check_for_modem_pvt_errors(pvt_frame);
+    if (pvt_events_handled % 30 == 0) {
+        print_satellite_stats(pvt_frame);
+    }
+
+    if (pvt_rc == 0 && (pvt_frame.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID)) {
+        pvt_data_work.pvt_frame = pvt_frame;
+        k_work_submit_to_queue(&gps_work_queue, &pvt_data_work.work);
+    }
+}
+
 static void gnss_event_handler(int event)
 {
     print_gnss_event(event);
@@ -181,41 +210,16 @@ static void gnss_event_handler(int event)
         break;
 
     case NRF_MODEM_GNSS_EVT_PVT: {
-        static uint32_t pvt_events_handled = 0;
-        pvt_events_handled += 1;
-
-        if (!k_work_delayable_is_pending(&gps_timed_out_work)) {
-            LOG_WRN("Timeout work not running while getting PVT events, starting");
-            k_work_schedule_for_queue(&gps_work_queue, &gps_timed_out_work, GPS_TIMEOUT);
-        }
-
-        if (pvt_events_handled % 100 == 0) {
-            LOG_DBG("Handled %u PVT events, so far", pvt_events_handled);
-        }
-
-        nrf_modem_gnss_pvt_data_frame pvt_frame;
-
-        int pvt_rc = nrf_modem_gnss_read(&pvt_frame, sizeof(pvt_frame), event);
-
-        check_for_modem_pvt_errors(pvt_frame);
-        if (pvt_events_handled % 30 == 0) {
-            print_satellite_stats(pvt_frame);
-        }
-
-        if (pvt_rc == 0 && (pvt_frame.flags & NRF_MODEM_GNSS_PVT_FLAG_FIX_VALID)) {
-            pvt_data_work.pvt_frame = pvt_frame;
-            k_work_submit_to_queue(&gps_work_queue, &pvt_data_work.work);
-        }
-
+        handle_pvt_event();
         break;
     }
 
     // Modem is requesting assistance data.
     case NRF_MODEM_GNSS_EVT_AGNSS_REQ: {
-        int retval = nrf_modem_gnss_read(&assistance_work.agnss_frame, sizeof(assistance_work.agnss_frame), NRF_MODEM_GNSS_DATA_AGNSS_REQ);
-        if (retval == 0) {
-            k_work_submit_to_queue(&gps_work_queue, &assistance_work.work);
-        }
+        // int retval = nrf_modem_gnss_read(&assistance_work.agnss_frame, sizeof(assistance_work.agnss_frame), NRF_MODEM_GNSS_DATA_AGNSS_REQ);
+        // if (retval == 0) {
+        //     k_work_submit_to_queue(&gps_work_queue, &assistance_work.work);
+        // }
         break;
     }
 

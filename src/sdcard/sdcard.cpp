@@ -5,7 +5,7 @@
 
 LOG_MODULE_REGISTER(sdcard, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
-#ifdef CONFIG_TRACCAR_ENABLE_SD_CARD
+#ifdef CONFIG_TRACKCAR_ENABLE_SD_CARD
 
 #    include <ff.h>
 #    include <zephyr/fs/fs.h>
@@ -14,6 +14,11 @@ LOG_MODULE_REGISTER(sdcard, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 #    define SDCARD_DISK_NAME "SD"
 static FATFS fat_fs;
 static struct fs_mount_t sd_mount {};
+
+// TODO:
+// - Try to reinit if we fail
+// - Once again try to filter
+// - Cut power to sdcard randomly?
 
 // TODO: Does not work.
 // int sdcard_set_log_filtering()

@@ -36,7 +36,7 @@ int main()
     LOG_INF("Init Done, main thread sleeping forever....");
 
     while (1) {
-        k_sleep(K_SECONDS(5));
-        get_battery_stats();
+        k_sleep(K_FOREVER);
+        // get_battery_stats();
     }
 }

@@ -20,8 +20,6 @@ LOG_MODULE_REGISTER(network_requests, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 //       if too many failed attempts, re-resolve DNS
 // TODO: Add a timer that checks if the network stack has been on too long
 // TODO: Add watchdog
-// TODO: Packet builder with dedicated stack space
-// TODO: Make packet queue generic
 
 // Forward Declarations
 static void handle_network_request(k_work* work);
@@ -104,19 +102,26 @@ static void handle_network_request(k_work* work)
 
     size_t request_len = strnlen(packet.get_raw_buffer(NULL), CONFIG_NETWORK_PACKET_SIZE);
 
-    LOG_INF("Body pulled, len = %u:\n", request_len);
-    print_u8_array((uint8_t*)packet.get_raw_buffer(NULL), request_len);
+    // LOG_INF("Body pulled, len = %u:\n", request_len);
+    // print_u8_array((uint8_t*)packet.get_raw_buffer(NULL), request_len);
 
     char rec_buf[CONFIG_NETWORK_PACKET_SIZE] = { 0 };
 
     int send_rc = send_http_request(packet.get_raw_buffer(NULL), request_len, rec_buf, sizeof(rec_buf));
     if (send_rc == 0) {
+        // TODO: I prefer this method but how much time does this waste?
+        int64_t current_time = k_uptime_ticks();
         (void)k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
+        int64_t after_time = k_uptime_ticks();
+        LOG_INF("Wasted Ticks: %lld", after_time - current_time);
     }
 
+    // If we have other packets to send, queue them, if not, disconnect
     if (k_msgq_num_used_get(&network_requests_msgq) > 0) {
         LOG_INF("Message queue not empty, scheduling another run");
         k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, K_FOREVER);
+    } else {
+        set_networking_state(NetworkState::Disconnected);
     }
 
     // size_t printed = 0;
@@ -182,7 +187,7 @@ static int send_http_request(char* request_body, size_t request_length, char* re
     // TODO: Add back chunking.
     // Make our request
     LOG_DBG("Request length: %u\n", request_length);
-    print_u8_array((uint8_t*)request_body, 512);
+    // print_u8_array((uint8_t*)request_body, 512);
     int bytes = send(fd, request_body, request_length, 0);
     if (bytes < 0) {
         LOG_ERR("send() failed, err %d\n", errno);
