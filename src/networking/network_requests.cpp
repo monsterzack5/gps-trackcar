@@ -22,7 +22,6 @@ LOG_MODULE_REGISTER(network_requests, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 // TODO: Add watchdog
 // TODO: Packet builder with dedicated stack space
 // TODO: Make packet queue generic
-// TODO: Session resumption
 
 // Forward Declarations
 static void handle_network_request(k_work* work);

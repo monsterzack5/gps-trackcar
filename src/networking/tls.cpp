@@ -109,5 +109,13 @@ int tls_setup(int fd)
         return err;
     }
 
+    // Session Cache
+    int session_cache = TLS_SESSION_CACHE_ENABLED;
+    err = setsockopt(fd, SOL_TLS, TLS_SESSION_CACHE, &session_cache, sizeof(session_cache));
+    if (err) {
+        LOG_ERR("Failed to enable TLS session cache, err %d\n", errno);
+        return err;
+    }
+
     return 0;
 }
