@@ -32,21 +32,47 @@ config NETWORK_PACKET_SIZE
     default 512
     help
         size of a network packet that will be queued
-# TODO Select and Unselect things with this
-config TRACCAR_ENABLE_SD_CARD
-    bool "Enable"
-    default false
-    select DISK_ACCESS
-    select DISK_DRIVERS
-    select DISK_DRIVER_SDMMC
-    select FILE_SYSTEM
-    select FAT_FILESYSTEM_ELM
-    select FILE_SYSTEM_MKFS
-    select FS_FATFS_EXFAT
-    depends on !NRF_MODEM_LIB_TRACE
-    
-    help
-      "Enable or disable logging to an SDCard"
+
+menu "GPS Settings"
+
+config GPS_TIMEOUT_SECONDS
+	int "GPS fix timeout"
+	range 120 1800
+	default 600
+	help
+	  Time in seconds to wait for a GPS fix before restarting.
+	  If no fix is obtained within this time, GPS will be stopped
+	  and restarted after the restart delay.
+
+config GPS_RESTART_DELAY_SECONDS
+	int "GPS restart delay"
+	range 10 1800
+	default 600
+	help
+	  Time in seconds to wait before restarting GPS after a timeout.
+	  This delay allows the modem to cool down and potentially
+	  improve conditions for the next fix attempt.
+
+endmenu
+
+menu "SD Card"
+
+config TRACKCAR_ENABLE_SD_CARD
+	bool "Enable SD card logging"
+	default n
+	select DISK_ACCESS
+	select DISK_DRIVERS
+	select DISK_DRIVER_SDMMC
+	select FILE_SYSTEM
+	select FAT_FILESYSTEM_ELM
+	select FILE_SYSTEM_MKFS
+	select FS_FATFS_EXFAT
+	depends on !NRF_MODEM_LIB_TRACE
+	help
+	  Enable logging to SD card. Note that this requires SD card
+	  hardware and is incompatible with modem trace.
+
+endmenu
 
 
 config TRACCAR_DEFAULT_LOG_LEVEL
@@ -57,6 +83,8 @@ config TRACCAR_DEFAULT_LOG_LEVEL
         default log level for project
 
 endmenu
+
+
 
 menu "Zephyr Kernel"
 source "Kconfig.zephyr"
