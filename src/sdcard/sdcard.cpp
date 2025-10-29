@@ -51,7 +51,6 @@ static struct fs_mount_t sd_mount {};
 
 int sdcard_init()
 {
-
     sd_mount.type = FS_FATFS;
     sd_mount.fs_data = &fat_fs;
     sd_mount.mnt_point = "/SD:";

@@ -23,7 +23,6 @@ LOG_MODULE_REGISTER(network_requests, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 // TODO: Packet builder with dedicated stack space
 // TODO: Make packet queue generic
 // TODO: Session resumption
-// TODO: Don't let GPS try to get a fix forever, timeout and wait after a while
 
 // Forward Declarations
 static void handle_network_request(k_work* work);
