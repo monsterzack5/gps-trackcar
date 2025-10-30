@@ -19,7 +19,6 @@ LOG_MODULE_REGISTER(network_requests, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 // TODO: Extra info struct that counts failed attempts
 //       if too many failed attempts, re-resolve DNS
 // TODO: Add a timer that checks if the network stack has been on too long
-// TODO: Add watchdog
 
 // Forward Declarations
 static void handle_network_request(k_work* work);
@@ -32,10 +31,6 @@ static k_poll_event modem_event = K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_SIGNAL, K
 static k_work_poll handle_message_queue;
 
 K_THREAD_STACK_DEFINE(network_requests_workqueue_stack, (1024 * 10));
-// TODO:
-// Maybe this should be more generic and hold a packet?
-// We want to queue all of our packets
-// work on that later.
 K_MSGQ_DEFINE(network_requests_msgq, sizeof(struct PacketBuilder), 20, 1);
 static k_work_q network_requests_workqueue;
 
@@ -78,11 +73,7 @@ int send_gps_update(const nrf_modem_gnss_pvt_data_frame& frame)
     int result = 0;
     k_poll_signal_check(&modem_is_free_signal, &is_signaled, &result);
 
-    // TODO: This needs to make very sure we are actually running the workqueue!
-    // if something fails and for some reason we don't reschedule it, that can cause
-    // problems.
-
-    k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, K_FOREVER);
+    k_work_poll_submit_to_queue(&network_requests_workqueue, &handle_message_queue, &modem_event, 1, K_HOURS(1));
     return 0;
 }
 
@@ -172,41 +163,38 @@ static int send_http_request(char* request_body, size_t request_length, char* re
         return -1;
     }
 
-    LOG_DBG("Connecting to %s:%d\n", CONFIG_TRACCAR_HOSTNAME,
+    LOG_DBG("Connecting to %s:%d", CONFIG_TRACCAR_HOSTNAME,
         ntohs(((struct sockaddr_in*)(res->ai_addr))->sin_port));
     err = connect(fd, res->ai_addr, res->ai_addrlen);
     if (err) {
-        LOG_ERR("connect() failed, err: %d\n", errno);
+        LOG_ERR("connect() failed, err: %d", errno);
         cleanup();
         return -1;
     }
 
-    // TODO: Add back chunking.
-    // Make our request
-    LOG_DBG("Request length: %u\n", request_length);
-    // print_u8_array((uint8_t*)request_body, 512);
+    LOG_DBG("Request length: %u", request_length);
+
     int bytes = send(fd, request_body, request_length, 0);
     if (bytes < 0) {
-        LOG_ERR("send() failed, err %d\n", errno);
-        LOG_ERR("Error string: %s\n", strerror(errno));
+        LOG_ERR("send() failed, err %d", errno);
+        LOG_ERR("Error string: %s", strerror(errno));
         cleanup();
         return -1;
     }
 
     LOG_DBG("Sent %d bytes\n", bytes);
 
-    // TODO: Add back chunking
     bytes = recv(fd, receive_buffer, receive_length, 0);
     if (bytes < 0) {
-        LOG_DBG("recv() failed, err %d\n", errno);
+        LOG_DBG("recv() failed, err %d", errno);
         cleanup();
         return -1;
     }
 
-    LOG_DBG("Received %d bytes\n", bytes);
+    LOG_DBG("Received %d bytes", bytes);
 
     /* Print HTTP response */
-    LOG_DBG("Received response:\n%s\n", receive_buffer);
+    LOG_DBG("Received response:\n%s", receive_buffer);
     cleanup();
 
     return 0;

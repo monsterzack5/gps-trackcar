@@ -69,7 +69,6 @@ static int actually_resolve(DnsQuery* query)
         if (rc != 0) {
             LOG_ERR("getaddrinfo failed with rc = %d, attempt %d", rc, attempts);
             continue;
-            // TODO: If this returns a non-zero code, who is responsible for freeing the linked list?
         }
 
         did_resolve = true;

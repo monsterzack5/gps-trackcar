@@ -1,4 +1,5 @@
-// TODO: NEED COPYRIGHT (Circuitdojo?)
+// Copyright (c) 2024 Circuit Dojo
+// SPDX-License-Identifier: Apache-2.0
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>

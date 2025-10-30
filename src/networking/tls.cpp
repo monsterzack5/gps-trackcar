@@ -70,7 +70,6 @@ int cert_provision(void)
     return 0;
 }
 
-// TODO: Any URL
 int tls_setup(int fd)
 {
     /* Security tag that we have provisioned the certificate with */

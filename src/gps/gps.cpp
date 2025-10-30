@@ -216,8 +216,6 @@ static void gnss_event_handler(int event)
 {
     print_gnss_event(event);
 
-    // TODO: I don't remember the events we get from scheduled downloads
-    // Make sure we're handling those properly with our poller.
     switch (event) {
     case NRF_MODEM_GNSS_EVT_PERIODIC_WAKEUP:
         k_poll_signal_reset(&modem_is_free_signal);
@@ -304,13 +302,8 @@ int gps_init()
         LOG_WRN("Failed to set GNSS use case");
     }
 
-    // TODO:
-    // Using these defaults will give us continuous tracking
-    uint16_t fix_retry = 0;
-    uint16_t fix_interval = 0;
-
-    fix_retry = 120;
-    fix_interval = 120;
+    uint16_t fix_retry = 120;
+    uint16_t fix_interval = 120;
 
     // TODO: Set these based on if we're moving, if we're stopped, battery low, etc...
     if (nrf_modem_gnss_fix_retry_set(fix_retry) != 0) {
