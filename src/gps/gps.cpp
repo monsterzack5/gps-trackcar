@@ -53,13 +53,14 @@ static assistance_work_struct assistance_work;
 
 void pvt_data_handler_fn(k_work* work_item)
 {
-    static int64_t last_uptime_sent = 0;
+    // Always report first fix
+    static int64_t last_uptime_sent = INT64_MIN;
+    static const int64_t rate_limit_milliseconds = CONFIG_GPS_PACKET_RATE_LIMIT_MILLISECONDS;
 
     pvt_work_struct* data = CONTAINER_OF(work_item, struct pvt_work_struct, work);
 
     int64_t uptime = k_uptime_get();
-    if (uptime - last_uptime_sent >= (int64_t)30000) {
-        send_gps_update(data->pvt_frame);
+    if (uptime - last_uptime_sent >= rate_limit_milliseconds) {
         last_uptime_sent = uptime;
     } else {
         LOG_WRN("Not sending request due to timeout");

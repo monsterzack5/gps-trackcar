@@ -53,6 +53,12 @@ config GPS_RESTART_DELAY_SECONDS
 	  This delay allows the modem to cool down and potentially
 	  improve conditions for the next fix attempt.
 
+config GPS_PACKET_RATE_LIMIT_MILLISECONDS
+    int "rate limit"
+    default 30000
+    help
+      The minium amount of time between sending up GPS packets
+
 endmenu
 
 menu "SD Card"
