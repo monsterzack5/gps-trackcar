@@ -12,9 +12,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-#include "print_bin.h"
-
 LOG_MODULE_REGISTER(network_requests, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+
+// NOTE: We are copying large amounts of memory around with our message queue. In a perfect world, we would use K_MEM_SLAB_DEFINE
+//       to create a memory area, and only store pointers in the message queue. Then, only pointers are copied.
 
 // TODO: Extra info struct that counts failed attempts
 //       if too many failed attempts, re-resolve DNS
@@ -82,9 +83,9 @@ static void handle_network_request(k_work* work)
     ARG_UNUSED(work);
 
     LOG_DBG("Handling network packet");
-    // _peek because _get removes the packet, we only want to clear
-    // the packet if we use it.
+
     PacketBuilder packet {};
+
     int rc = k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
     if (rc < 0) {
         LOG_WRN("Handle network request called with nothing to process!");
@@ -92,9 +93,6 @@ static void handle_network_request(k_work* work)
     }
 
     size_t request_len = strnlen(packet.get_raw_buffer(NULL), CONFIG_NETWORK_PACKET_SIZE);
-
-    // LOG_INF("Body pulled, len = %u:\n", request_len);
-    // print_u8_array((uint8_t*)packet.get_raw_buffer(NULL), request_len);
 
     char rec_buf[CONFIG_NETWORK_PACKET_SIZE] = { 0 };
 
