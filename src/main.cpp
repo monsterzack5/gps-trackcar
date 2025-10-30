@@ -16,7 +16,6 @@ int main()
     battery_init();
 
     int rc = networking_init();
-    network_info_init();
     network_requests_init();
 
     if (rc != 0) {

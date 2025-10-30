@@ -1,26 +1,15 @@
 #include "network_info.h"
 
 #include <modem/modem_info.h>
+#include <nrf_modem_at.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(network_info, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
-static char imei[16] = { 0 };
-
-int network_info_init()
-{
-    // TODO:
-    // We should maybe do this with AT Commands?
-    // Not sure why this needs to be enabled in prj.conf
-    int rc = modem_info_init();
-    if (rc != 0) {
-        LOG_ERR("modem_info_init failed, rc = %d", rc);
-        return -1;
-    }
-
-    return 0;
-}
+// NOTE: IMEI comes as "<15 Digit IMEI>\r\nOK\r\n"
+static char imei[24] = { 0 };
 
 const char* get_imei()
 {
@@ -30,54 +19,38 @@ const char* get_imei()
         return imei;
     }
 
-    // Not sure how to error handle this right now
+    nrf_modem_at_cmd(imei, sizeof(imei), "AT+CGSN");
 
-    int rc = modem_info_string_get(MODEM_INFO_IMEI, imei, sizeof(imei));
-    if (rc < 0) {
-        LOG_ERR("modem_info_string_get failed, rc = %d", rc);
-        did_already_run = true;
-    }
+    imei[16] = '\0';
 
     return imei;
-}
-
-static int get_modem_str_and_convert_int(char* buffer, size_t buffer_size, modem_info modem_identifier)
-{
-    int length = modem_info_string_get(modem_identifier, buffer, buffer_size);
-    if (length < 0) {
-        LOG_ERR("modem_info_string_get failed, rc = %d", length);
-        return 0;
-    }
-
-    char* end_ptr = NULL;
-    int converted = strtol(buffer, &end_ptr, 10);
-    return converted;
-}
-
-static float get_modem_str_and_convert_float(char* buffer, size_t buffer_size, modem_info modem_identifier)
-{
-    int length = modem_info_string_get(modem_identifier, buffer, buffer_size);
-    if (length < 0) {
-        LOG_ERR("modem_info_string_get failed, rc = %d, str ident: %d", length, (int)modem_identifier);
-        return 0;
-    }
-
-    char* end_ptr = NULL;
-    float converted = strtod(buffer, &end_ptr);
-    return converted;
 }
 
 ProviderInfo get_provider_info()
 {
     ProviderInfo info = {};
 
-    char buffer[128] = { 0 };
-    info.mcc = get_modem_str_and_convert_int(buffer, sizeof(buffer), MODEM_INFO_MCC);
-    info.mnc = get_modem_str_and_convert_int(buffer, sizeof(buffer), MODEM_INFO_MNC);
-    info.lac = get_modem_str_and_convert_int(buffer, sizeof(buffer), MODEM_INFO_AREA_CODE);
-    info.cellid = get_modem_str_and_convert_int(buffer, sizeof(buffer), MODEM_INFO_CELLID);
-    info.signal_strength = get_modem_str_and_convert_int(buffer, sizeof(buffer), MODEM_INFO_RSRP);
-    info.temperature = get_modem_str_and_convert_float(buffer, sizeof(buffer), MODEM_INFO_TEMP);
+    char buffer[256] = { 0 };
+
+    // Get network operator (MCC/MNC)
+    nrf_modem_at_cmd(buffer, sizeof(buffer), "AT+COPS?");
+    char plmn[8];
+    if (sscanf(buffer, "+COPS: %*d,%*d,\"%[^\"]\"", plmn) == 1) {
+        info.mcc = (plmn[0] - '0') * 100 + (plmn[1] - '0') * 10 + (plmn[2] - '0');
+        info.mnc = atoi(plmn + 3);
+    }
+
+    // Get LAC and Cell ID
+    nrf_modem_at_cmd(buffer, sizeof(buffer), "AT+CEREG?");
+    sscanf(buffer, "+CEREG: %*d,%*d,\"%x\",\"%x\"", &info.lac, &info.cellid);
+
+    // Get signal strength
+    // nrf_modem_at_cmd(buffer, sizeof(buffer), "AT+CESQ");
+    // sscanf(buffer, "+CESQ: %*d,%*d,%*d,%*d,%d,%d", &rsrq, &rsrp);
+
+    // Get temperature
+    nrf_modem_at_cmd(buffer, sizeof(buffer), "AT%%XTEMP?");
+    sscanf(buffer, "%%XTEMP: %lf", &info.temperature);
 
     return info;
 }
