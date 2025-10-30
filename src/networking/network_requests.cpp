@@ -110,10 +110,7 @@ static void handle_network_request(k_work* work)
     int send_rc = send_http_request(packet.get_raw_buffer(NULL), request_len, rec_buf, sizeof(rec_buf));
     if (send_rc == 0) {
         // TODO: I prefer this method but how much time does this waste?
-        int64_t current_time = k_uptime_ticks();
         (void)k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
-        int64_t after_time = k_uptime_ticks();
-        LOG_INF("Wasted Ticks: %lld", after_time - current_time);
     }
 
     // If we have other packets to send, queue them, if not, disconnect

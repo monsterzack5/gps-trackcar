@@ -21,7 +21,7 @@ const char* get_imei()
 
     nrf_modem_at_cmd(imei, sizeof(imei), "AT+CGSN");
 
-    imei[16] = '\0';
+    imei[15] = '\0';
 
     return imei;
 }

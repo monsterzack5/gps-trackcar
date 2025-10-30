@@ -13,6 +13,8 @@
 
 LOG_MODULE_REGISTER(gps, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
+static void print_gps_fix_information(const nrf_modem_gnss_pvt_data_frame& frame);
+
 // ---
 // NOTE: GPS Timeout and Restart
 // - On NRF_MODEM_GNSS_EVT_PERIODIC_WAKEUP
@@ -54,7 +56,7 @@ static assistance_work_struct assistance_work;
 void pvt_data_handler_fn(k_work* work_item)
 {
     // Always report first fix
-    static int64_t last_uptime_sent = INT64_MIN;
+    static int64_t last_uptime_sent = -CONFIG_GPS_PACKET_RATE_LIMIT_MILLISECONDS;
     static const int64_t rate_limit_milliseconds = CONFIG_GPS_PACKET_RATE_LIMIT_MILLISECONDS;
 
     pvt_work_struct* data = CONTAINER_OF(work_item, struct pvt_work_struct, work);
@@ -62,6 +64,8 @@ void pvt_data_handler_fn(k_work* work_item)
     int64_t uptime = k_uptime_get();
     if (uptime - last_uptime_sent >= rate_limit_milliseconds) {
         last_uptime_sent = uptime;
+        print_gps_fix_information(data->pvt_frame);
+        send_gps_update(data->pvt_frame);
     } else {
         LOG_WRN("Not sending request due to timeout");
     }
@@ -102,6 +106,9 @@ static void check_for_modem_pvt_errors(const nrf_modem_gnss_pvt_data_frame& fram
     }
     if (frame.flags & NRF_MODEM_GNSS_SV_FLAG_UNHEALTHY) {
         LOG_WRN("!! Sat Unhealthy");
+    }
+    if (frame.flags & NRF_MODEM_GNSS_PVT_FLAG_SCHED_DOWNLOAD) {
+        LOG_DBG("Scheduled Download Packet");
     }
 }
 
@@ -191,6 +198,18 @@ static void handle_pvt_event()
         pvt_data_work.pvt_frame = pvt_frame;
         k_work_submit_to_queue(&gps_work_queue, &pvt_data_work.work);
     }
+}
+
+static void print_gps_fix_information(const nrf_modem_gnss_pvt_data_frame& frame)
+{
+    LOG_DBG("We got a fix! Lat,Lon: %f,%f", frame.latitude, frame.longitude);
+    LOG_DBG("Fix Time: %04u-%02u-%02uT%02u:%02u:%02uZ",
+        frame.datetime.year,
+        frame.datetime.month,
+        frame.datetime.day,
+        frame.datetime.hour,
+        frame.datetime.minute,
+        frame.datetime.seconds);
 }
 
 static void gnss_event_handler(int event)
