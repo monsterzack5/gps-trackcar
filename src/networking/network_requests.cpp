@@ -85,7 +85,7 @@ static void handle_network_request(k_work* work)
     // _peek because _get removes the packet, we only want to clear
     // the packet if we use it.
     PacketBuilder packet {};
-    int rc = k_msgq_peek(&network_requests_msgq, &packet);
+    int rc = k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
     if (rc < 0) {
         LOG_WRN("Handle network request called with nothing to process!");
         return;
@@ -99,9 +99,10 @@ static void handle_network_request(k_work* work)
     char rec_buf[CONFIG_NETWORK_PACKET_SIZE] = { 0 };
 
     int send_rc = send_http_request(packet.get_raw_buffer(NULL), request_len, rec_buf, sizeof(rec_buf));
-    if (send_rc == 0) {
-        // TODO: I prefer this method but how much time does this waste?
-        (void)k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
+
+    // Re-queue the packet if we fail to send it.
+    if (send_rc != 0) {
+        k_msgq_put(&network_requests_msgq, &packet, K_NO_WAIT);
     }
 
     // If we have other packets to send, queue them, if not, disconnect
@@ -111,17 +112,6 @@ static void handle_network_request(k_work* work)
     } else {
         set_networking_state(NetworkState::Disconnected);
     }
-
-    // size_t printed = 0;
-    // size_t how_many_to_print = 30;
-
-    // do {
-    //     printk("%.*s", how_many_to_print, &request.body[printed]);
-    //     printed += 30;
-    //     if (request_len < how_many_to_print) {
-    //         how_many_to_print = request_len;
-    //     }
-    // } while (printed < request_len);
 }
 
 #include "print_bin.h"
