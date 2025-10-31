@@ -1,0 +1,37 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Flash Merged Image",
+            "type": "shell",
+            "command": "probe-rs",
+            "args": [
+                "download",
+                "--chip",
+                "nRF9151_xxAA",
+                "--binary-format",
+                "hex",
+                "${workspaceFolder}/build/merged.hex",
+                "&&",
+                "probe-rs",
+                "reset",
+                "--chip",
+                "nRF9151_xxAA"
+            ],
+            "options": {
+                "shell": {
+                    "executable": "/bin/bash",
+                    "args": [
+                        "-c"
+                    ]
+                }
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        }
+    ]
+}
