@@ -5,6 +5,7 @@ LOG_MODULE_REGISTER(main, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 
 #include "battery.h"
 #include "connectivity.h"
+#include "device_ui.h"
 #include "gps.h"
 #include "network_info.h"
 #include "network_requests.h"
@@ -14,6 +15,7 @@ LOG_MODULE_REGISTER(main, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 int main()
 {
     temp_sensor_init();
+    device_ui_init();
     sdcard_init();
     battery_init();
 

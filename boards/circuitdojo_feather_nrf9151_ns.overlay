@@ -1,10 +1,10 @@
 #include <zephyr/dt-bindings/i2c/i2c.h>
 
 &npm1300_leds {
-            nordic,led0-mode = "host";
-            nordic,led1-mode = "host";
-            nordic,led2-mode = "host";
-        };
+    nordic,led0-mode = "host";
+    nordic,led1-mode = "host";
+    nordic,led2-mode = "host";
+};
 
 &i2c2 {
     // clock-frequency = <I2C_BITRATE_FAST>;

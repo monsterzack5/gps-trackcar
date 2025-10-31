@@ -15,6 +15,7 @@ zephyr_include_directories(src/sensors)
 zephyr_include_directories(src/sync)
 zephyr_include_directories(src/util)
 zephyr_include_directories(src/sdcard)
+zephyr_include_directories(src/ui)
 
 generate_inc_file_for_target(
     app
@@ -38,6 +39,7 @@ target_sources(app PRIVATE
 
     src/sensors/battery.cpp
     src/sensors/temp_sensor.cpp
+    src/sensors/pmic.cpp
 
     src/sdcard/sdcard.cpp
 
