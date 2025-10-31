@@ -37,6 +37,9 @@ target_sources(app PRIVATE
     src/networking/packet_builder.cpp
 
     src/sensors/battery.cpp
+    src/sensors/temp_sensor.cpp
 
     src/sdcard/sdcard.cpp
+
+    src/ui/device_ui.cpp
 )

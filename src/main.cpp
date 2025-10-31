@@ -9,9 +9,11 @@ LOG_MODULE_REGISTER(main, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
 #include "network_info.h"
 #include "network_requests.h"
 #include "sdcard.h"
+#include "temp_sensor.h"
 
 int main()
 {
+    temp_sensor_init();
     sdcard_init();
     battery_init();
 
