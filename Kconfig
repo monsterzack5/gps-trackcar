@@ -90,6 +90,18 @@ config TRACKCAR_DEFAULT_LOG_LEVEL
 
 endmenu
 
+menu "Input"
+
+config BUTTON_RELEASE_TIMEOUT_MS
+    int "Timeout"
+    range 50 5000
+    default 250
+    help
+      Amount of milliseconds before a button release is registered and 
+      processed
+
+endmenu
+
 
 
 menu "Zephyr Kernel"

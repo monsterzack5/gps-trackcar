@@ -11,44 +11,37 @@
 #define BUTTON_KEY INPUT_KEY_0
 
 // TODO: Make kconfig
-static const k_timeout_t BUTTON_TIMEOUT = K_MSEC(250);
+static const k_timeout_t BUTTON_TIMEOUT = K_MSEC(CONFIG_BUTTON_RELEASE_TIMEOUT_MS);
 
-LOG_MODULE_REGISTER(device_ui, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+LOG_MODULE_REGISTER(device_ui, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 
-void handle_button_data(k_work* work);
-K_WORK_DEFINE(button_data_work, handle_button_data);
-
-void handle_button_events(k_timer* timer);
-void button_event_callback(input_event* evt, void* data);
-
-K_TIMER_DEFINE(button_event_timer, handle_button_events, NULL);
-INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(buttons)), button_event_callback, NULL);
-
+/* ---- Buttons ---- */
 enum class ButtonAction : uint64_t {
     ShortPress,
     LongPress,
     Unknown,
 };
 
-enum class CurrentButtonState {
+enum class ButtonState {
     Pressed,
     Released,
 };
 
 struct ButtonData {
     ButtonAction last_action;
-    CurrentButtonState current_state;
+    ButtonState current_state;
     uint8_t presses;
     int64_t pressed_down_at;
 };
 
-static ButtonData button_data = { .last_action = ButtonAction::Unknown, .current_state = CurrentButtonState::Released, .presses = 0, .pressed_down_at = 0 };
-static ButtonData button_data_copy = { .last_action = ButtonAction::Unknown, .current_state = CurrentButtonState::Released, .presses = 0, .pressed_down_at = 0 };
+struct button_work_data {
+    k_work_delayable work;
+    ButtonData isr_data;
+};
+static button_work_data button_work;
 
-// LEDs
-static const device* leds = DEVICE_DT_GET(DT_NODELABEL(npm1300_leds));
-static const uint32_t POWER_INDICATOR_LED = 1;
-static const uint8_t POWER_INDICATOR_LED_ON_BRIGHTNESS = 80;
+void button_event_isr(input_event* evt, void* data);
+INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(buttons)), button_event_isr, (void*)&button_work);
 
 static void toggle_power_mode()
 {
@@ -68,68 +61,56 @@ static void toggle_power_mode()
     blink_pattern(BlinkCode::LowPowerModeActivated);
 }
 
-void handle_button_data(k_work* work)
+void button_data_work_handler(k_work* work_item)
 {
-    ARG_UNUSED(work);
+    button_work_data* data = CONTAINER_OF(work_item, struct button_work_data, work);
 
-    if (button_data_copy.presses == 1 && button_data_copy.last_action == ButtonAction::ShortPress) {
+    // This is a race condition (too bad!)
+    ButtonData copy = data->isr_data;
+    data->isr_data.presses = 0;
+    data->isr_data.pressed_down_at = 0;
+    data->isr_data.last_action = ButtonAction::Unknown;
+
+    if (copy.presses == 1 && copy.last_action == ButtonAction::ShortPress) {
         toggle_power_mode();
     }
 }
 
-void handle_button_events(k_timer* timer)
+void button_event_isr(input_event* evt, void* data)
 {
-    ARG_UNUSED(timer);
-
-    // LOG_DBG("button: Presses: %u, Current State: %s, Button Action: %s\n", button_data.presses, get_str_current_state(button_data.current_state), get_str_button_action(button_data.last_action));
-
-    // Copy button data
-    button_data_copy = button_data;
-
-    // Reset button
-    button_data.last_action = ButtonAction::Unknown;
-    button_data.presses = 0;
-
-    // TODO: Maybe some logic around if the work is pending or not?
-    k_work_submit(&button_data_work);
-}
-
-void button_event_callback(input_event* evt, void* data)
-{
-    ButtonData* button = nullptr;
-
-    if (evt->code == BUTTON_KEY) {
-        button = &button_data;
-    } else {
+    if (evt->code != BUTTON_KEY) {
         LOG_ERR("Unknown input event received");
         return;
     }
 
+    auto* button = (button_work_data*)data;
+
+    if (k_work_delayable_is_pending(&button->work)) {
+        k_work_cancel_delayable(&button->work);
+    }
+
     /* On Press */
     if (evt->value == 1) {
-        button->current_state = CurrentButtonState::Pressed;
-        button->presses += 1;
-        button->last_action = ButtonAction::Unknown;
-        button->pressed_down_at = k_uptime_get();
-
-        k_timer_stop(&button_event_timer);
+        button->isr_data.current_state = ButtonState::Pressed;
+        button->isr_data.presses += 1;
+        button->isr_data.last_action = ButtonAction::Unknown;
+        button->isr_data.pressed_down_at = k_uptime_get();
         return;
     }
 
     /* On Release */
-    button->current_state = CurrentButtonState::Released;
-    int64_t press_duration = k_uptime_delta(&button->pressed_down_at);
+    button->isr_data.current_state = ButtonState::Released;
+    int64_t press_duration = k_uptime_delta(&button->isr_data.pressed_down_at);
 
-    if (press_duration >= 1000) {
-        button->last_action = ButtonAction::LongPress;
-    } else {
-        button->last_action = ButtonAction::ShortPress;
-    }
+    button->isr_data.last_action = (press_duration >= 1000) ? ButtonAction::LongPress : ButtonAction::ShortPress;
 
-    k_timer_start(&button_event_timer, BUTTON_TIMEOUT, K_FOREVER);
+    k_work_schedule(&button->work, K_MSEC(CONFIG_BUTTON_RELEASE_TIMEOUT_MS));
 }
 
-/* LEDs */
+/* ---- LEDs ---- */
+static const device* leds = DEVICE_DT_GET(DT_NODELABEL(npm1300_leds));
+static const uint32_t POWER_INDICATOR_LED = 1;
+static const uint8_t POWER_INDICATOR_LED_ON_BRIGHTNESS = 80;
 
 struct led_work_struct {
     k_work_delayable work;
@@ -142,8 +123,6 @@ static led_work_struct led_work;
 
 void led_work_handler(k_work* work_item)
 {
-    // Handle LED stuff
-
     led_work_struct* data = CONTAINER_OF(work_item, struct led_work_struct, work);
     LOG_INF("Handling index: %u", data->index);
 
@@ -198,9 +177,9 @@ void blink_pattern(BlinkCode code)
 int device_ui_init()
 {
     // We are default in high power mode
-    // led_set_brightness(leds, POWER_INDICATOR_LED, POWER_INDICATOR_LED_ON_BRIGHTNESS);
     led_off(leds, POWER_INDICATOR_LED);
 
     k_work_init_delayable(&led_work.work, led_work_handler);
+    k_work_init_delayable(&button_work.work, button_data_work_handler);
     return 0;
 }
