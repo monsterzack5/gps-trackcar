@@ -2,6 +2,7 @@
 todo.md
 scratch/
 env.conf
+.gdb_history
 
 # editors
 *.swp
