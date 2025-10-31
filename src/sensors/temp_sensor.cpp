@@ -3,7 +3,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(temp_sensor, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+LOG_MODULE_REGISTER(temp_sensor, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 
 const device* aht = DEVICE_DT_GET(DT_NODELABEL(aht20));
 

@@ -11,7 +11,7 @@
 #include "network_info.h"
 #include "network_requests.h"
 
-LOG_MODULE_REGISTER(gps, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+LOG_MODULE_REGISTER(gps, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 
 static void print_gps_fix_information(const nrf_modem_gnss_pvt_data_frame& frame);
 

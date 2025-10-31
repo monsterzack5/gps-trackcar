@@ -7,7 +7,7 @@
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
 
-LOG_MODULE_REGISTER(tls, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+LOG_MODULE_REGISTER(tls, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 
 static const char cert[] = {
 #include "root_cert.pem.inc"

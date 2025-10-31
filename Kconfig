@@ -81,7 +81,7 @@ config TRACKCAR_ENABLE_SD_CARD
 endmenu
 
 
-config TRACCAR_DEFAULT_LOG_LEVEL
+config TRACKCAR_DEFAULT_LOG_LEVEL
     int "Level"
     range 0 4
     default 3

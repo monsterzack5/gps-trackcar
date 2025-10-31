@@ -18,7 +18,7 @@ struct ProviderInfo {
 
     void print()
     {
-        LOG_MODULE_DECLARE(network_info, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+        LOG_MODULE_DECLARE(network_info, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
         LOG_DBG("ProviderInfo: mcc: %u, mnc: %u, lac: %u, cellid: %u, signal_strength: %u, temperature: %f",
             mcc, mnc, lac, cellid, signal_strength, temperature);
     }

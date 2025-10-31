@@ -3,7 +3,7 @@
 #include <zephyr/logging/log_backend.h>
 #include <zephyr/logging/log_ctrl.h>
 
-LOG_MODULE_REGISTER(sdcard, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+LOG_MODULE_REGISTER(sdcard, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 
 #ifdef CONFIG_TRACKCAR_ENABLE_SD_CARD
 

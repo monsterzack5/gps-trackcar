@@ -12,7 +12,7 @@
 #include "network_info.h"
 #include "tls.h"
 
-LOG_MODULE_REGISTER(connectivity, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+LOG_MODULE_REGISTER(connectivity, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 
 K_SEM_DEFINE(network_connected, 0, 1);
 

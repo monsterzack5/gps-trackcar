@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(network_info, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+LOG_MODULE_REGISTER(network_info, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 
 // NOTE: IMEI comes as "<15 Digit IMEI>\r\nOK\r\n"
 static char imei[24] = { 0 };

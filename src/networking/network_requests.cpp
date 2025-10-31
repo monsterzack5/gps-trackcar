@@ -12,7 +12,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(network_requests, CONFIG_TRACCAR_DEFAULT_LOG_LEVEL);
+LOG_MODULE_REGISTER(network_requests, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 
 // NOTE: We are copying large amounts of memory around with our message queue. In a perfect world, we would use K_MEM_SLAB_DEFINE
 //       to create a memory area, and only store pointers in the message queue. Then, only pointers are copied.
