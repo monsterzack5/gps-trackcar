@@ -28,6 +28,22 @@ TempAndHumidity get_temp_and_humidity()
     return temp_humidity;
 }
 
+float get_temperature()
+{
+    int ret = sensor_sample_fetch(aht);
+    if (ret < 0) {
+        LOG_ERR("Failed to read sensor sample, rc = %d", ret);
+        return 0.00f;
+    }
+
+    sensor_value value {};
+
+    sensor_channel_get(aht, SENSOR_CHAN_AMBIENT_TEMP, &value);
+    float temperature = (float)value.val1 + ((float)value.val2 / 1000000.0f);
+
+    return temperature;
+}
+
 int temp_sensor_init()
 {
     if (!device_is_ready(aht)) {

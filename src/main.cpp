@@ -7,17 +7,30 @@ LOG_MODULE_REGISTER(main, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 #include "connectivity.h"
 #include "device_ui.h"
 #include "gps.h"
+#include "low_power.h"
 #include "network_info.h"
 #include "network_requests.h"
+#include "pmic.h"
 #include "sdcard.h"
 #include "temp_sensor.h"
 
+#include <modem/lte_lc.h>
+#include <modem/nrf_modem_lib.h>
+
 int main()
 {
+    nrf_modem_lib_init();
     temp_sensor_init();
     device_ui_init();
     sdcard_init();
     battery_init();
+
+    LOG_INF("IMEI: %s", get_imei());
+
+    if (IS_ENABLED(CONFIG_TRACKCAR_LOW_POWER)) {
+        k_sleep(K_SECONDS(5));
+        set_power_mode(PowerMode::Low);
+    }
 
     int rc = networking_init();
     network_requests_init();
@@ -40,6 +53,5 @@ int main()
 
     while (1) {
         k_sleep(K_FOREVER);
-        // get_battery_stats();
     }
 }

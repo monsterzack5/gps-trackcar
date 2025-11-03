@@ -1,5 +1,8 @@
 #include "packet_builder.h"
 
+#include "battery.h"
+#include "temp_sensor.h"
+
 int PacketBuilder::build_gps_packet(const nrf_modem_gnss_pvt_data_frame& gps_frame, const ProviderInfo& info, uint8_t battery_soc)
 {
     append_get();
@@ -14,9 +17,9 @@ int PacketBuilder::build_gps_packet(const nrf_modem_gnss_pvt_data_frame& gps_fra
     append_query_gps_iso8601("timestamp", gps_frame.datetime);
     append_query_cell_info("cell", info);
 
-    append_query_int("batt", battery_soc); // Replace with actual battery level
-    append_query_char("charge", "false");  // Replace with actual charge status
-    append_query_double("temp", 11.11);    // Replace with actual temperature
+    append_query_int("batt", battery_soc);
+    append_query_bool("charge", get_battery_charge_status());
+    append_query_double("temp", get_temperature());
     append_http1_1();
     append_host_line(CONFIG_TRACCAR_HOSTNAME, CONFIG_TRACCAR_PORT);
     append_connection_close_line();

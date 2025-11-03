@@ -84,6 +84,19 @@ public:
         index += rc;
         return 0;
     }
+    int append_query_bool(const char* name, bool append)
+    {
+        int rc = 0;
+
+        if (append) {
+            rc = snprintf(&buffer[index], buf_size - index, "&%s=%s", name, "true");
+        } else {
+            rc = snprintf(&buffer[index], buf_size - index, "&%s=%s", name, "false");
+        }
+
+        index += rc;
+        return 0;
+    }
     int append_query_double(const char* name, double append)
     {
         int rc = snprintf(&buffer[index], buf_size - index, "&%s=%f", name, append);

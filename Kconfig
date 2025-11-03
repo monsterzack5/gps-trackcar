@@ -88,8 +88,6 @@ config TRACKCAR_DEFAULT_LOG_LEVEL
     help
         default log level for project
 
-endmenu
-
 menu "Input"
 
 config BUTTON_RELEASE_TIMEOUT_MS
@@ -102,6 +100,18 @@ config BUTTON_RELEASE_TIMEOUT_MS
 
 endmenu
 
+menu "Low Power"
+config TRACKCAR_LOW_POWER
+    bool "Enable Low Power"
+    default false
+    depends on !DEBUG
+    help
+        Setting this to true enables low power/ship mode
+
+endmenu
+
+
+endmenu
 
 
 menu "Zephyr Kernel"

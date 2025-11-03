@@ -68,6 +68,7 @@
 
 &npm1300_buck1 {
     regulator-min-microvolt = <3300000>;
+    regulator-boot-on;
 };
 
 &npm1300_charger {

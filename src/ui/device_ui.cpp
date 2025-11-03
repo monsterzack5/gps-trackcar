@@ -175,8 +175,9 @@ void blink_pattern(BlinkCode code)
 
 int device_ui_init()
 {
-    // We are default in high power mode
     led_off(leds, POWER_INDICATOR_LED);
+    led_off(leds, 0);
+    led_off(leds, 2);
 
     k_work_init_delayable(&led_work.work, led_work_handler);
     k_work_init_delayable(&button_work.work, button_data_work_handler);
