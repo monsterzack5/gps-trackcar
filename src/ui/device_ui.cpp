@@ -6,6 +6,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include "low_power.h"
 #include "pmic.h"
 
 #define BUTTON_KEY INPUT_KEY_0
@@ -50,14 +51,12 @@ static void toggle_power_mode()
     high_power = !high_power;
 
     if (high_power) {
-        // High power
-        enable_rp2040();
+        set_power_mode(PowerMode::High);
         blink_pattern(BlinkCode::HighPowerModeActivated);
         return;
     }
 
-    // Low power mode
-    disable_rp2040();
+    set_power_mode(PowerMode::Low);
     blink_pattern(BlinkCode::LowPowerModeActivated);
 }
 

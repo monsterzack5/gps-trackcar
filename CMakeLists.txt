@@ -16,6 +16,7 @@ zephyr_include_directories(src/sync)
 zephyr_include_directories(src/util)
 zephyr_include_directories(src/sdcard)
 zephyr_include_directories(src/ui)
+zephyr_include_directories(src/low_power)
 
 generate_inc_file_for_target(
     app
@@ -44,4 +45,6 @@ target_sources(app PRIVATE
     src/sdcard/sdcard.cpp
 
     src/ui/device_ui.cpp
+
+    src/low_power/low_power.cpp
 )
