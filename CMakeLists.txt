@@ -42,6 +42,8 @@ target_sources(app PRIVATE
     src/sensors/temp_sensor.cpp
     src/sensors/pmic.cpp
 
+    src/util/watchdog.cpp
+
     src/sdcard/sdcard.cpp
 
     src/ui/device_ui.cpp

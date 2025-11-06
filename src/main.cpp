@@ -13,12 +13,14 @@ LOG_MODULE_REGISTER(main, CONFIG_TRACKCAR_DEFAULT_LOG_LEVEL);
 #include "pmic.h"
 #include "sdcard.h"
 #include "temp_sensor.h"
+#include "watchdog.h"
 
 #include <modem/lte_lc.h>
 #include <modem/nrf_modem_lib.h>
 
 int main()
 {
+    watchdog_init();
     nrf_modem_lib_init();
     temp_sensor_init();
     device_ui_init();
