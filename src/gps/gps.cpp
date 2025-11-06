@@ -132,11 +132,12 @@ static void print_satellite_stats(const nrf_modem_gnss_pvt_data_frame& pvt_data)
         }
     }
 
-    LOG_DBG("Tracking: %2d Using: %2d Unhealthy: %d", tracked, in_fix, unhealthy);
+    LOG_INF("Tracking: %2d Using: %2d Unhealthy: %d", tracked, in_fix, unhealthy);
 }
 
 static void print_gnss_event(int event)
 {
+    // The commented out events happen continuously when GPS is running
     switch (event) {
     case NRF_MODEM_GNSS_EVT_PVT:
         // LOG_DBG("New Event: NRF_MODEM_GNSS_EVT_PVT");
@@ -182,7 +183,7 @@ static void handle_pvt_event()
     }
 
     if (pvt_events_handled % 100 == 0) {
-        LOG_DBG("Handled %u PVT events, so far", pvt_events_handled);
+        LOG_INF("Handled %u PVT events, so far", pvt_events_handled);
     }
 
     nrf_modem_gnss_pvt_data_frame pvt_frame;
@@ -202,8 +203,8 @@ static void handle_pvt_event()
 
 static void print_gps_fix_information(const nrf_modem_gnss_pvt_data_frame& frame)
 {
-    LOG_DBG("We got a fix! Lat,Lon: %f,%f", frame.latitude, frame.longitude);
-    LOG_DBG("Fix Time: %04u-%02u-%02uT%02u:%02u:%02uZ",
+    LOG_INF("We got a fix! Lat,Lon: %f,%f", frame.latitude, frame.longitude);
+    LOG_INF("Fix Time: %04u-%02u-%02uT%02u:%02u:%02uZ",
         frame.datetime.year,
         frame.datetime.month,
         frame.datetime.day,

@@ -83,8 +83,6 @@ static void handle_network_request(k_work* work)
 {
     ARG_UNUSED(work);
 
-    LOG_DBG("Handling network packet");
-
     PacketBuilder packet {};
 
     int rc = k_msgq_get(&network_requests_msgq, &packet, K_NO_WAIT);
@@ -161,8 +159,6 @@ static int send_http_request(char* request_body, size_t request_length, char* re
         return -1;
     }
 
-    LOG_DBG("Request length: %u", request_length);
-
     int bytes = send(fd, request_body, request_length, 0);
     if (bytes < 0) {
         LOG_ERR("send() failed, err %d", errno);
@@ -175,7 +171,7 @@ static int send_http_request(char* request_body, size_t request_length, char* re
 
     bytes = recv(fd, receive_buffer, receive_length, 0);
     if (bytes < 0) {
-        LOG_DBG("recv() failed, err %d", errno);
+        LOG_ERR("recv() failed, err %d", errno);
         cleanup();
         return -1;
     }
@@ -194,7 +190,7 @@ static int send_http_request(char* request_body, size_t request_length, char* re
         }
     }
 
-    LOG_DBG("Received %d bytes", bytes);
+    LOG_INF("Received %d bytes", bytes);
 
     /* Print HTTP response */
     LOG_DBG("Received response:\n%s", receive_buffer);

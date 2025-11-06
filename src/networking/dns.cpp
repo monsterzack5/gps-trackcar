@@ -135,8 +135,6 @@ addrinfo* resolve_dns_with_caching(const char* url, const char* port, bool force
             first_free = clear_least_recently_used();
         }
 
-        LOG_DBG("Using dns cache slot %u for url %s", first_free, url);
-
         // Store it
         snprintf(cached_entries[first_free].name, URL_MAX_SIZE, "%s", url);
         snprintf(cached_entries[first_free].port, PORT_MAX_SIZE, "%s", port);
