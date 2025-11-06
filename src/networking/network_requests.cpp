@@ -3,6 +3,7 @@
 #include "battery.h"
 #include "connectivity.h"
 #include "dns.h"
+#include "low_power.h"
 #include "net_req.h"
 #include "network_info.h"
 #include "packet_builder.h"
@@ -177,6 +178,20 @@ static int send_http_request(char* request_body, size_t request_length, char* re
         LOG_DBG("recv() failed, err %d", errno);
         cleanup();
         return -1;
+    }
+
+    char* debug = strstr(receive_buffer, "DEBUG");
+
+    if (debug && strlen(debug) >= 8) {
+        // We got a message relating to debug, turn it on or off
+        if (strncmp(debug + 5, "=ON", 3) == 0) {
+            set_power_mode(PowerMode::High);
+            LOG_INF("Going into high power mode...");
+        } else if (strncmp(debug + 5, "=OFF", 4) == 0) {
+            LOG_INF("Going into low power mode...");
+            k_sleep(K_MSEC(500));
+            set_power_mode(PowerMode::Low);
+        }
     }
 
     LOG_DBG("Received %d bytes", bytes);

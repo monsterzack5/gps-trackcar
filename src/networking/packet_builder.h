@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <zephyr/kernel.h>
 
 #include "net_req.h"
 #include "network_info.h"

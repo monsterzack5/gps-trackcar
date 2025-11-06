@@ -75,16 +75,17 @@ int set_power_mode(PowerMode mode)
 
     switch (mode) {
     case PowerMode::High:
-        rc |= enable_rp2040();
         rc |= resume_uart();
+        rc |= enable_rp2040();
         break;
     case PowerMode::Low:
         rc |= disable_rp2040();
         rc |= suspend_accelerometer();
         rc |= suspend_nor_storage();
+        k_sleep(K_MSEC(500));
         rc |= suspend_uart();
         break;
     }
 
-    return 0;
+    return rc;
 }
